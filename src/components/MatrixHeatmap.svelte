@@ -155,7 +155,7 @@
     sceneId === 'qk-matmul' ? 'Q × Kᵀ (Scaled Attention Scores)' :
     sceneId === 'scale-softmax' 
       ? ($subStepIndex === 0 ? 'Scaling by 1/√d_k' : 'Softmax Attention Weights')
-      : 'Attention Grid'
+      : (sceneId === 'heads-compare' ? 'Compare Attention Heads' : 'Attention Grid')
   );
 
   $: resolvedSubtitle = subtitle || (
@@ -164,7 +164,7 @@
       ? ($subStepIndex === 0 
           ? 'Divide each dot product by the square root of d_k (d_k = 4) to prevent vanishing gradients' 
           : 'Normalized relevance weights where rows sum to exactly 1.0')
-      : 'Color opacity represents value magnitude'
+      : (sceneId === 'heads-compare' ? 'Side-by-side matrices showing attention patterns for each head' : 'Color opacity represents value magnitude')
   );
 
   $: resolvedShowAllHeads = showAllHeads || (sceneId === 'heads-compare');
@@ -181,7 +181,7 @@
 
   $: activeHighlightId = sceneId === 'scale-softmax' 
     ? 'eq-scale-softmax' 
-    : (sceneId === 'qk-matmul' ? 'eq-qk-matmul' : 'eq-proj-q');
+    : (sceneId === 'qk-matmul' ? 'eq-qk-matmul' : (sceneId === 'heads-compare' ? 'eq-heads-compare' : 'eq-proj-q'));
 
   function handleCellEnter(r, c, val) {
     hoveredRow = r;
@@ -234,8 +234,14 @@
     }
   }
 
+  $: dKVal = $dataMode === 'lecture' ? (currentDModel / numHeads) : $configDK;
+
   // Tensor shape steps
-  $: traceSteps = isSoftmaxScene ? [
+  $: traceSteps = sceneId === 'heads-compare' ? [
+    { label: 'Heads split Q_h, K_h', shape: [numHeads, seqLen, dKVal], highlightId: activeHighlightId },
+    { label: 'Parallel Attention A_h', shape: [numHeads, seqLen, seqLen], highlightId: activeHighlightId },
+    { label: 'Output Blended O_h', shape: [numHeads, seqLen, dKVal], highlightId: activeHighlightId }
+  ] : (isSoftmaxScene ? [
     { label: 'Raw Scores S', shape: [seqLen, seqLen], highlightId: activeHighlightId },
     { label: 'Scale Factor (1/√d_k)', shape: [], highlightId: activeHighlightId },
     { label: 'Attention Weights A', shape: [seqLen, seqLen], highlightId: activeHighlightId }
@@ -243,7 +249,7 @@
     { label: 'Q [seq, d_model]', shape: [seqLen, currentDModel], highlightId: activeHighlightId },
     { label: 'K [seq, d_model]', shape: [seqLen, currentDModel], highlightId: activeHighlightId },
     { label: 'Scores [seq, seq]', shape: [seqLen, seqLen], highlightId: activeHighlightId }
-  ];
+  ]);
 
   $: activeTraceIndex = isSoftmaxScene 
     ? ($subStepIndex === 0 ? 1 : 2)

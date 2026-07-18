@@ -919,6 +919,623 @@ export const SCENE_COPY = {
       ]
     }
   },
+  'weighted-sum': {
+    eyebrow: 'Attention · Aggregation',
+    title: 'Weighted Sum',
+    fourQuestions: {
+      whatIsHappening: 'We multiply the attention weights matrix A by the Value vectors V to produce the blended weighted sum vectors O.',
+      why: 'This aggregates information from all tokens. Each token\'s output vector becomes a weighted blend of all other tokens\' values, according to their attention percentages.',
+      whatChanged: 'Attention weights [seq_len, seq_len] and Value vectors [seq_len, d_k] are multiplied to produce weighted outputs [seq_len, d_k] per head, which are concatenated to [seq_len, d_model].',
+      whatToObserve: 'Hover over a cell in the left grid. See how the row of attention weights multiplies the column of Value vectors to produce the cell value in the output vector.',
+    },
+    body: {
+      beginner: 'Finally, we use our attention percentages to blend the word meanings together. If word A gives 80% attention to word B, A\'s output will take 80% of its new meaning from B\'s Value vector. This mixes context from the entire sentence.',
+      mtech: 'The weighted sum aggregates the value representations V per head: O_h = A_h * V_h, where A_h is the [seq, seq] attention weights matrix and V_h is the [seq, d_k] Value matrix. The head outputs are then concatenated along the channel dimension to form the multi-head representation.',
+      research: 'Multi-head aggregation aggregates Value representations. The context vector output for a single head h is computed as O_h = Softmax(Q_h K_h^T / sqrt(d_k)) * V_h. Concatenating the outputs of all h heads yields the final contextualized sequence representation of shape [seq_len, d_model], ready for output projection.',
+    },
+    deepDive: {
+      math: 'O = A V',
+      complexity: 'O(seq_len^2 × d_k) operations per attention head.',
+      matrixEquivalence: 'The multiplication translates to O_{i,j} = sum_k(A_{i,k} * V_{k,j}). Each output dimension j for token i is a weighted average of that dimension across all other tokens\' Value vectors.',
+      misconceptions: [
+        'Value vectors (V) are what gets aggregated, not the positional encoded vectors (X_pe) directly. This allows the model to mix contextualized information rather than raw input embeddings.',
+      ],
+      notes: 'd_k = 4. The output shape per head is [seq_len, 4]. Since there are 4 heads, concatenating them yields a [seq_len, 16] output, which matches the model\'s d_model shape.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'What does the weighted sum achieve?',
+          body: 'This is the step where information actually mixes across tokens. Before this, all projections were purely local to individual tokens. Now, each token\'s vector collects information from other tokens based on their matching relevance scores.',
+        },
+        {
+          title: 'Why concatenate the heads?',
+          body: 'Each head represents a different focus space (e.g. tracking subjects, verbs, adjectives). Concatenating their outputs stitches these different relational summaries side-by-side, giving a rich multi-perspective context vector.',
+        }
+      ],
+      example: {
+        left: [0.8, 0.1, 0.05, 0.05],
+        right: [1.5, -0.4, 3.2, 0.8],
+        caption: 'Attention weight row (left) multiplying Value vectors (right) to compute the blended output.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Attention Weights & Values', shape: null },
+      after: { label: 'Weighted Sum Output', shape: null },
+      whatChanged: 'We aggregated the semantic content of Value vectors using the normalized attention weights.',
+      structured: {
+        entered: 'Attention weights matrix A of shape [seq_len, seq_len] and Value matrix V of shape [seq_len, d_k] per head.',
+        happened: 'Multiplied the attention weights matrix by the Value matrix for each head, and concatenated the head outputs.',
+        changed: 'Value representations are combined and blended across sequence steps.',
+        leaves: 'Concatenated weighted sum representations of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'What is the primary purpose of the Weighted Sum step in Self-Attention?',
+      choices: [
+        'To blend the Value vectors of all tokens together based on their attention weights.',
+        'To project the inputs to a smaller vocabulary dimension.',
+        'To add positional encoding to the value matrices.',
+        'To calculate the relevance scores between Queries and Keys.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The Weighted Sum step aggregates the Value vectors from all positions, mixing context across tokens according to their attention weights.',
+      transition: 'Now that the heads are blended, we concatenate them and project them back. Let\'s see that in the registry.',
+      distractorNotes: {
+        1: 'Incorrect. Vocabulary mapping happens at the very end of the Transformer network.',
+        2: 'Incorrect. Positional encoding was already added at the input level.',
+        3: 'Incorrect. Query-Key matching is what computes the weights; this step applies those weights to Values.'
+      }
+    },
+    pytorch: [
+      { id: 'code-weighted-sum', code: 'context = torch.matmul(weights, V)' }
+    ],
+    equationTerms: [
+      { id: 'eq-weighted-sum', tex: 'O = A V' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-weighted-sum', codeLineId: 'code-weighted-sum' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain the multiplication of weights and values.',
+        script: 'Now we blend our Value vectors together. We multiply the attention weights matrix A by the Value matrix V. Each row in the output represents a weighted average of all Value vectors in the sentence.',
+        audienceQuestion: 'Why do we multiply by V instead of the raw input tokens?',
+        expectedAnswer: 'Because Value vectors contain contextual semantic representations optimized during training, rather than raw embeddings.',
+        misconception: 'Clarify that this multiplication is done separately for each head.',
+        transition: 'Let\'s check the resulting summed vectors.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Demonstrate head concatenation.',
+        script: 'Here is the final summed output. We concatenate the vectors from all four heads side-by-side, rebuilding a single matrix of dimension sequence length by d_model.',
+        audienceQuestion: 'What is the shape of the concatenated matrix?',
+        expectedAnswer: 'It is four by sixteen, matching our model\'s d_model shape.',
+        misconception: 'Make sure students realize that these concatenated vectors are now ready for the output projection.',
+        transition: 'Let\'s review this step.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Summarize the weighted sum transition.',
+        script: 'We have combined the values of all tokens according to their attention coefficients. Let\'s look at what changed.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s verify our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess attention aggregation knowledge.',
+        script: 'Take a look at the quick check question. Consider what is actually mixed in self-attention, and how it is routed.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Now we proceed to comparing attention heads.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Help students understand that attention weights act as routing coefficients, controlling which value features flow to which output tokens.'
+      ],
+      misconceptions: [
+        'Emphasize that concatenation does not mix values mathematically; it simply places head outputs side-by-side. Mixing happens in the subsequent Output Projection.'
+      ],
+      suggestedQuestions: [
+        'How would the output change if a token gave 1.0 attention to itself and 0.0 to all others?'
+      ]
+    }
+  },
+  'split-heads': {
+    eyebrow: 'Attention · Subspaces',
+    title: 'Split into Multiple Heads',
+    fourQuestions: {
+      whatIsHappening: 'We reshape the Query matrix Q of shape [seq_len, d_model] into [seq_len, num_heads, d_k], and then transpose it to [num_heads, seq_len, d_k].',
+      why: 'This divides the d_model dimensions into independent attention subspaces (heads). Each head can focus on different types of syntactic and semantic relationships in parallel.',
+      whatChanged: 'A single sequence matrix [seq_len, d_model] is converted into multiple head matrices of shape [num_heads, seq_len, d_k].',
+      whatToObserve: 'Compare Step 0 (Reshape) with Step 1 (Transpose). In Step 0, the segments are grouped by token; in Step 1, the segments are grouped by attention Head.',
+    },
+    body: {
+      beginner: 'Instead of looking at the whole word vector at once, we split it into smaller chunks called "Heads". Think of this as putting on different colored glasses: one head might look for subjects, another for verbs, and another for adjectives. We group these segments by head so they can compute attention independently.',
+      mtech: 'The multi-head attention mechanism splits the Q, K, and V matrices along the channel dimension. For a projection matrix Q [seq, d_model], it is first reshaped to [seq, num_heads, d_k] and then transposed to [num_heads, seq, d_k]. This places the head dimension first, enabling batched matrix multiplications.',
+      research: 'Multi-head splitting projects representations into multiple subspaces. Formally, Q_h = Transpose(Reshape(Q, [S, H, d_k]), [1, 0, 2]) where S is seq_len, H is num_heads, and d_k = d_model / H. This transposition is essential to leverage highly optimized batch matrix multiplication (GEMM) libraries during the Q * K^T calculation.',
+    },
+    deepDive: {
+      math: 'Q_h = \\text{Transpose}\\left(\\text{Reshape}\\left(Q, [S, H, d_k]\\right), [1, 0, 2]\\right)',
+      complexity: 'O(seq_len × d_model) memory copy or metadata-only view reshape.',
+      matrixEquivalence: 'The split partitions the 16-dimensional channel space into 4 independent subspaces of size 4. Cell (t, h) in Step 0 maps to row t of Head h in Step 1.',
+      misconceptions: [
+        'Reshaping does not copy memory in modern frameworks like PyTorch; it simply changes the tensor stride metadata. However, transposing dimensions usually requires a contiguous memory copy.',
+      ],
+      notes: 'd_model = 16, num_heads = 4, d_k = 4. Each token\'s vector is split into 4 equal quarters.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need multiple heads?',
+          body: 'Single-head attention averages all relationships, which can cause key details to blur. Multi-head attention allows different heads to simultaneously track different relationships (e.g. subject-verb, pronoun-noun).',
+        },
+        {
+          title: 'Why transpose the dimensions?',
+          body: 'For fast computing: transposing swaps the sequence and head dimensions. By placing the head dimension first (shape [heads, seq_len, d_k]), we can perform standard 2D matrix multiplications for all heads in parallel using a single batched operation.',
+        }
+      ],
+      example: {
+        left: [0.1, -0.2, 0.5, 0.3, 0.9, -0.8, 0.1, 0.4, -0.2, 0.6, 0.5, 0.1, 0.0, -0.3, 0.4, 0.8],
+        right: [0.1, -0.2, 0.5, 0.3],
+        caption: 'A single token vector of size 16 (left) is sliced into its Head 0 segment of size 4 (right).'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Query Projection Q', shape: null },
+      after: { label: 'Split Head Subspaces Q_h', shape: null },
+      whatChanged: 'We partitioned the channel dimension and transposed the tensor dimensions to separate the attention heads.',
+      structured: {
+        entered: 'Projection matrix Q of shape [seq_len, d_model].',
+        happened: 'Reshaped the columns into [seq_len, num_heads, d_k] and transposed the sequence and head dimensions.',
+        changed: 'The single representation is split into 4 independent attention subspaces.',
+        leaves: 'Tensor of shape [num_heads, seq_len, d_k] representing Q for each head.',
+      }
+    },
+    quickCheck: {
+      question: 'Why do we transpose the shape from [seq_len, num_heads, d_k] to [num_heads, seq_len, d_k]?',
+      choices: [
+        'To group the data by attention heads, enabling parallel batch matrix multiplications.',
+        'To combine all heads back into a single vector of size d_model.',
+        'To add positional encoding to the head dimensions.',
+        'To apply the softmax normalization function.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Transposing swaps the sequence and head dimensions. Placing the head dimension first allows the model to compute attention matching (Q * K^T) for all heads in parallel using batched matrix multiplication.',
+      transition: 'Now that the matrices are split and transposed, let\'s calculate the relevance scores in Q * K^T.',
+      distractorNotes: {
+        1: 'Incorrect. Combining heads happens during concatenation at the end of attention, not at the beginning.',
+        2: 'Incorrect. Positional encoding was already added to the inputs before projections.',
+        3: 'Incorrect. Softmax is a mathematical function that does not use Value vectors.'
+      }
+    },
+    pytorch: [
+      { id: 'code-split-heads', code: 'Q = Q.view(seq_len, num_heads, d_k).transpose(0, 1)' }
+    ],
+    equationTerms: [
+      { id: 'eq-split-heads', tex: 'Q_h = \\text{Transpose}\\left(\\text{Reshape}\\left(Q, [S, H, d_k]\\right), [1, 0, 2]\\right)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-split-heads', codeLineId: 'code-split-heads' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain the reshaping step.',
+        script: 'Now we split our Query projection into multiple heads. We reshape the matrix from sequence length by d_model into sequence length by number of heads by d_k. This separates the token vectors into distinct head channels.',
+        audienceQuestion: 'How many dimensions does each token segment have after reshaping?',
+        expectedAnswer: 'Each token segment has size four, which is d_k.',
+        misconception: 'Make sure students realize that the data is still grouped by token in this step.',
+        transition: 'Now let\'s transpose the dimensions to group them by head.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain transposition.',
+        script: 'Next, we transpose the sequence and head dimensions. This groups the segment slices by attention head, placing the head dimension first. The shape is now number of heads by sequence length by d_k.',
+        audienceQuestion: 'Why is this shape change beneficial for GPU computing?',
+        expectedAnswer: 'Because it allows us to feed the matrices for all heads into a single batched matrix multiplication, calculating attention in parallel.',
+        misconception: 'Confirm that this transposition happens similarly for Key and Value projections.',
+        transition: 'Let\'s review what this accomplished.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review the split-heads shape change.',
+        script: 'We have divided our representation into independent head subspaces. Let\'s see the shape change summary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding of transposition.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess multi-head transposition mechanics.',
+        script: 'Answer the quick check question. Think about why grouping by head allows parallel batch computing.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Now we proceed to Q * K^T score calculation.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Use the analogy of sorting books: Reshaping is like organizing books in columns on a desk, and Transposing is like packing them into separate boxes based on their category.'
+      ],
+      misconceptions: [
+        'Explain that the split is purely a reshape operation; no linear weights or parameter calculations occur here.'
+      ],
+      suggestedQuestions: [
+        'How does changing the number of heads affect d_k if d_model is kept constant?'
+      ]
+    }
+  },
+  'heads-compare': {
+    eyebrow: 'Attention · Visualizing Heads',
+    title: 'Individual Attention Heads',
+    fourQuestions: {
+      whatIsHappening: 'We visualize the attention weight matrices of all 4 heads side-by-side to compare their focus patterns.',
+      why: 'Multiple heads allow the model to capture different types of relationships simultaneously (e.g. subjects vs. verbs vs. direct objects).',
+      whatChanged: 'We display the 3D attention tensor [num_heads, seq_len, seq_len] as 4 independent, side-by-side 2D heatmaps.',
+      whatToObserve: 'Compare the attention grids for Head 0, Head 1, Head 2, and Head 3. Notice how different heads focus on different token pairs.',
+    },
+    body: {
+      beginner: 'By looking at all attention heads side-by-side, we can see how they focus on different parts of the sentence. One head might focus heavily on connecting pronouns to their nouns, while another head focuses on connecting verbs to their direct objects. This diversity is what makes multi-head attention so powerful.',
+      mtech: 'Each attention head h computes its own softmax attention matrix A_h of shape [seq_len, seq_len]. We render all A_h grids side-by-side. The distinct color patterns highlight that each head acts as an independent feature filter, learning specialized contextual relationships.',
+      research: 'Multi-head attention projects Queries, Keys, and Values into H = 4 distinct parameter subspaces. We visualize A_h = Softmax(Q_h K_h^T / sqrt(d_k)) for h in [0, 3]. Because the projection parameters (W_q^h, W_k^h) are initialized independently, the heads naturally converge to complementary attention patterns (e.g., local positional matching, dependency relationships).',
+    },
+    deepDive: {
+      math: 'A_h = \\text{Softmax}\\left(\\frac{Q_h K_h^T}{\\sqrt{d_k}}\\right)',
+      complexity: 'O(heads × seq_len^2) operations to render all grids.',
+      matrixEquivalence: 'The side-by-side matrices represent 4 distinct attention distributions. For any row in any head, the values sum to exactly 1.0.',
+      misconceptions: [
+        'Heads do not share weights during projection. If they did, they would compute identical attention maps, defeating the purpose of multi-head attention.',
+      ],
+      notes: 'Each head h has shape [4, 4] in this lecture mode sentence. Notice how Head 0 has strong diagonal weights (local attention), while Head 2 has vertical stripes (focusing on a specific word).',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why visualize heads side-by-side?',
+          body: 'Comparing them side-by-side highlights the specialization. If you look closely, you\'ll see that some heads focus on adjacent words (local context), while others focus on long-range dependencies across the entire sentence.',
+        },
+        {
+          title: 'Do heads ever focus on the same things?',
+          body: 'Sometimes heads can overlap or show redundancy, especially in very deep models. However, during training, backpropagation forces them to specialize in different features to minimize loss.',
+        }
+      ],
+      example: {
+        left: [0.9, 0.05, 0.02, 0.03],
+        right: [0.1, 0.25, 0.55, 0.1],
+        caption: 'Head 0 (local subject focus) vs Head 1 (verb-object focus) weight rows for the same token.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Single Head Attention Weights', shape: null },
+      after: { label: 'Multi-Head Attention Weights', shape: null },
+      whatChanged: 'We expanded the view from a single head to compare the attention patterns of all heads in parallel.',
+      structured: {
+        entered: 'A single attention head matrix of shape [seq_len, seq_len].',
+        happened: 'Visualized all 4 attention head weight matrices side-by-side.',
+        changed: 'Displays the complete set of attention subspaces simultaneously.',
+        leaves: 'Four side-by-side grids representing the attention weights for all heads.',
+      }
+    },
+    quickCheck: {
+      question: 'What is the main benefit of having multiple attention heads rather than just one?',
+      choices: [
+        'It allows the model to learn multiple, complementary types of relationships simultaneously.',
+        'It reduces the memory footprint of the transformer model.',
+        'It forces all attention scores to sum to exactly 1.0.',
+        'It eliminates the need for positional encoding.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Multiple heads allow the model to focus on different syntactic and semantic relationships in parallel, capturing much richer context than a single-head representation.',
+      transition: 'Now that we have compared individual heads, we concatenate them back together. Let\'s see that in Concatenation.',
+      distractorNotes: {
+        1: 'Incorrect. Multi-head attention actually increases parameter counts slightly due to projection weights.',
+        2: 'Incorrect. Softmax is what forces the weights to sum to 1.0, not the number of heads.',
+        3: 'Incorrect. Multi-head attention still relies on positional encoding to track sequence positions.'
+      }
+    },
+    pytorch: [
+      { id: 'code-heads-compare', code: 'weights_all = torch.stack([softmax(matmul(Q_h, K_h.T) / sqrt(d_k)) for h in heads])' }
+    ],
+    equationTerms: [
+      { id: 'eq-heads-compare', tex: 'A_h = \\text{Softmax}\\left(\\frac{Q_h K_h^T}{\\sqrt{d_k}}\\right)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-heads-compare', codeLineId: 'code-heads-compare' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain head specialization.',
+        script: 'Let\'s compare all four attention heads side-by-side. By dividing our channel dimension, each head has learned to look for different grammatical and semantic relations in the sentence.',
+        audienceQuestion: 'Which head shows the most active diagonal values?',
+        expectedAnswer: 'Head 0, which focuses primarily on neighboring words.',
+        misconception: 'Remind students that all of these grids are computed simultaneously, not sequentially.',
+        transition: 'Let\'s summarize the difference between single and multi-head views.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review shape of parallel attention heads.',
+        script: 'We are displaying the entire four by four by four attention weights tensor. We can see all four heads in parallel.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess multi-head benefits.',
+        script: 'Take a look at the quick check question. Consider what would be lost if we only had a single attention head for the entire model.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Perfect. Now let\'s see how we merge these heads back in the Concatenation step.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Have students look at the vertical columns in Head 2: it highlights how a single word (like "chased" or "dog") can attract attention from all other words in that subspace.'
+      ],
+      misconceptions: [
+        'Clarify that there is no parameter sharing between the heads; their projection matrices are initialized and updated independently.'
+      ],
+      suggestedQuestions: [
+        'What would happen if we initialized all heads with the exact same weights?'
+      ]
+    }
+  },
+  'concat': {
+    eyebrow: 'Attention · Recombining',
+    title: 'Concatenation',
+    fourQuestions: {
+      whatIsHappening: 'We concatenate the outputs of all 4 attention heads of shape [num_heads, seq_len, d_k] back into a single matrix of shape [seq_len, d_model].',
+      why: 'This stitches the information captured by each independent attention subspace side-by-side, preparing it for the final output projection.',
+      whatChanged: 'Multiple head tensors [num_heads, seq_len, d_k] are untransposed and concatenated back to [seq_len, d_model = 16].',
+      whatToObserve: 'Hover over a head output block on the left. See how its columns correspond exactly to that head\'s segment inside the combined representations on the right.',
+    },
+    body: {
+      beginner: 'After our different attention heads have analyzed the sentence from their unique perspectives, we stitch their findings back together. We take the 4-dimensional output vectors of each head and place them side-by-side to restore a single 16-dimensional vector for each word. This is like assembling a jigsaw puzzle to see the full picture.',
+      mtech: 'Concatenation reverses the multi-head split. The independent head output vectors O_h [seq, d_k] are first transposed back to [seq, num_heads, d_k] and then reshaped to [seq, d_model] along the channel dimension. No mathematical blending occurs here; it is purely a structural concatenation.',
+      research: 'Multi-head concatenation merges representation subspaces. Formally, O_{concat} = Concat(O_0, O_1, ..., O_{H-1}) where O_h has shape [seq_len, d_k]. The resulting tensor has shape [seq_len, d_model = H * d_k]. This tensor is now ready to be mixed by the linear output projection W_o.',
+    },
+    deepDive: {
+      math: 'O_{concat} = \\text{Concat}\\left(O_0, O_1, \\dots, O_{H-1}\\right)',
+      complexity: 'O(seq_len × d_model) memory layout adjustment.',
+      matrixEquivalence: 'The operation groups columns by head. Segment h of token t on the right is populated directly by token t\'s output vector of Head h on the left.',
+      misconceptions: [
+        'Concatenation does not mix features across heads. If one head focuses on verbs and another on nouns, they remain strictly separated in different channels until the subsequent Output Projection step.',
+      ],
+      notes: 'H = 4, d_k = 4. The four 4-dimensional vectors from each head are concatenated side-by-side to recreate a 16-dimensional representation matching d_model.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why concatenate instead of averaging?',
+          body: 'Averaging head outputs would blend their features, losing the specialized details learned by each head. Concatenating keeps their representations distinct so that the downstream layers can decide how to weight and mix them.',
+        },
+        {
+          title: 'Is this the end of the attention layer?',
+          body: 'Almost. While concatenation stitches the features together, they are still isolated in separate head channels. We need one final linear transformation (the Output Projection) to mix these concatenated features back into a unified space.',
+        }
+      ],
+      example: {
+        left: [0.5, 0.2, -0.1, 0.8],
+        right: [0.5, 0.2, -0.1, 0.8, 0.9, -0.3, 0.2, 0.4, 0.0, 0.1, 0.5, -0.2, 0.1, 0.8, -0.4, 0.2],
+        caption: 'The Head 0 output (left) forms the first 4 dimensions of the 16-dimensional concatenated vector (right).'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Attention Head Outputs', shape: null },
+      after: { label: 'Concatenated Representation', shape: null },
+      whatChanged: 'We stitched the independent attention head vectors side-by-side along the channel dimension.',
+      structured: {
+        entered: 'Attention head outputs of shape [num_heads, seq_len, d_k].',
+        happened: 'Untransposed the sequence/head dimensions and concatenated the head outputs side-by-side.',
+        changed: 'The independent attention channels are combined into a single contextual representation.',
+        leaves: 'A stitched representation matrix of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'Which of the following describes the Concatenation step in multi-head attention?',
+      choices: [
+        'It places the output vectors of all attention heads side-by-side without mathematically mixing them.',
+        'It averages the outputs of all attention heads to reduce dimensionality.',
+        'It multiplies the head outputs by the positional encoding matrix.',
+        'It projects the token vectors back to the vocabulary space.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Concatenation simply groups the independent attention head outputs side-by-side, preserving their distinct subspace features for the downstream layers.',
+      transition: 'Now that the heads are concatenated, we project them back to the original model space. Let\'s see that in Output Projection.',
+      distractorNotes: {
+        1: 'Incorrect. Averaging is not used because it would blur the distinct features captured by each head.',
+        2: 'Incorrect. Positional encoding is only added at the input level, not here.',
+        3: 'Incorrect. Vocabulary mapping happens at the very end of the entire Transformer block, not here.'
+      }
+    },
+    pytorch: [
+      { id: 'code-concat', code: 'O = torch.cat([O_h for O_h in outputs], dim=-1)' }
+    ],
+    equationTerms: [
+      { id: 'eq-concat', tex: 'O_{concat} = \\text{Concat}\\left(O_0, O_1, \\dots, O_{H-1}\\right)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-concat', codeLineId: 'code-concat' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain multi-head recombination.',
+        script: 'After computing attention for each head, we stitch their findings back together. We take the output vectors from all four heads and concatenate them side-by-side along the channel dimension.',
+        audienceQuestion: 'What is the resulting shape of the matrix after stitching?',
+        expectedAnswer: 'It is sequence length by d_model, which is four by sixteen in this sentence.',
+        misconception: 'Emphasize that this is purely structural; no linear multiplication occurs yet.',
+        transition: 'Let\'s review this shape change.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review concatenation shapes.',
+        script: 'We have recombined the attention heads. Let\'s look at what changed.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s verify our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess concatenation understanding.',
+        script: 'Look at the quick check question. Recall whether concatenation mixes features or just aligns them.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Now we proceed to the Output Projection step.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Show how each quarter of the concatenated vector on the right matches the color of its corresponding head card on the left.'
+      ],
+      misconceptions: [
+        'Make sure students understand that the Concatenation step itself has no trainable weights. Training weights only appear in the final Output Projection (Wo).'
+      ],
+      suggestedQuestions: [
+        'How does concatenation preserve the independence of head features compared to summing them?'
+      ]
+    }
+  },
+  'output-proj': {
+    eyebrow: 'Attention · Output Space',
+    title: 'Output Projection',
+    fourQuestions: {
+      whatIsHappening: 'We multiply the concatenated head matrix O of shape [seq_len, d_model] by the output weight matrix Wo of shape [d_model, d_model] and add the bias bo.',
+      why: 'This blends the features from all independent attention heads back into a single unified space, allowing the model to project and mix the concatenated representations.',
+      whatChanged: 'The concatenated attention representations are linearly projected, yielding the attention block output Y of shape [seq_len, d_model].',
+      whatToObserve: 'Hover over cells in the weight matrix. Observe how each output dimension is a linear combination of all concatenated head dimensions.',
+    },
+    body: {
+      beginner: 'Now that the findings from all heads are stitched together side-by-side, we need to mix them. We multiply this concatenated vector by a final projection weight matrix Wo. This blends the features together, allowing the heads to communicate and synthesize their findings into a single unified meaning.',
+      mtech: 'The output projection maps the concatenated head outputs O back to the hidden space: Y = O * Wo + bo, where Wo is the [d_model, d_model] projection matrix and bo is the [d_model] bias. This mixes information across different heads, resolving head-specific structures.',
+      research: 'The final linear transformation of multi-head attention projects the concatenated representation back to the model space: MultiHead(Q, K, V) = Concat(head_1, ..., head_h) * Wo. This mixes channel-wise components across different heads, recovering a unified representation of shape [seq_len, d_model].',
+    },
+    deepDive: {
+      math: 'Y = O W_o + b_o',
+      complexity: 'O(seq_len × d_model^2) parameter operations.',
+      matrixEquivalence: 'The matrix multiplication projects the 16-dimensional concatenated vectors back into a new 16-dimensional space, mixing the independent attention subspaces.',
+      misconceptions: [
+        'Wo is not a projection to vocabulary space. It is a projection within the hidden layer d_model (size 16), which keeps the output dimension identical to the input dimension for the residual stream.',
+      ],
+      notes: 'd_model = 16. The projection weights Wo [16, 16] and bias bo [16] are learned parameters optimized during training.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need Wo?',
+          body: 'Concatenation simply groups head features side-by-side. Without Wo, the features of different heads would remain isolated in separate channels. Wo mixes these channels so the downstream layers receive unified contextual vectors.',
+        },
+        {
+          title: 'How does it support residual streams?',
+          body: 'For residual connections (X + Attention(X)) to work, the output of the attention block must match the input dimension exactly. Wo ensures that the output is projected back to d_model (size 16) dimensions.',
+        }
+      ],
+      example: {
+        left: [0.5, 0.2, -0.1, 0.8, 0.9, -0.3, 0.2, 0.4, 0.0, 0.1, 0.5, -0.2, 0.1, 0.8, -0.4, 0.2],
+        right: [1.2, -0.5, 2.1, 0.6, 0.8, -0.1, 1.4, 0.3, 0.2, 0.5, -0.1, 0.0, 0.9, -0.2, 0.3, 1.1],
+        caption: 'Concatenated vector of size 16 (left) projected back to 16 dimensions (right) using Wo.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Concatenated Heads Output', shape: null },
+      after: { label: 'Projected Attention Output', shape: null },
+      whatChanged: 'We projected the concatenated representation back to the unified model space, mixing the attention head features.',
+      structured: {
+        entered: 'Concatenated multi-head output matrix O of shape [seq_len, d_model].',
+        happened: 'Multiplied by the output projection matrix Wo and added the bias vector bo.',
+        changed: 'Subspace features from independent heads are linearly mixed and blended.',
+        leaves: 'Final attention block representation matrix Y of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'What is the primary role of the Output Projection (Wo) matrix in multi-head attention?',
+      choices: [
+        'To mix the independent attention head features together and restore the model\'s hidden dimension.',
+        'To normalize the attention weights so they sum to 1.0.',
+        'To split the model representations into multiple head subspaces.',
+        'To project token embeddings back to vocabulary logits.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The Output Projection matrix Wo mixes the side-by-side features of all attention heads together and projects the tensor back to the hidden d_model dimension (size 16), making it compatible with the residual stream.',
+      transition: 'Now that the attention block is complete, we add its output back to the residual stream. Let\'s see that in the Residual Connection.',
+      distractorNotes: {
+        1: 'Incorrect. Normalization is performed by the Softmax function, not Wo.',
+        2: 'Incorrect. Splitting into subspaces happens at the beginning of attention, not at the end.',
+        3: 'Incorrect. Logits projection occurs at the final classification layer of the entire model.'
+      }
+    },
+    pytorch: [
+      { id: 'code-output-proj', code: 'attn_out = torch.matmul(concat_heads, Wo) + bo' }
+    ],
+    equationTerms: [
+      { id: 'eq-output-proj', tex: 'Y = O W_o + b_o' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-output-proj', codeLineId: 'code-output-proj' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain the output projection weights matrix.',
+        script: 'To conclude the attention layer, we project the concatenated heads back to the model space. We multiply by the output weights matrix Wo. This matrix acts as a cross-head mixer.',
+        audienceQuestion: 'What is the dimension of the Wo weight matrix?',
+        expectedAnswer: 'It is d_model by d_model, which is sixteen by sixteen.',
+        misconception: 'Remind students that this weight matrix is learned and optimized during model training.',
+        transition: 'Let\'s compute the projection.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain projection matmul and bias addition.',
+        script: 'We perform the matrix multiplication and add the bias vector bo. Each column in the output is a linear combination of all concatenated head dimensions, successfully blending their perspectives.',
+        audienceQuestion: 'Why must the output shape match the input shape?',
+        expectedAnswer: 'So that it can be added back to the input residual stream in the next step.',
+        misconception: 'Make sure students notice that the individual head columns are now fully blended.',
+        transition: 'Let\'s review what changed in this projection.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review output projection shapes and data shift.',
+        script: 'We have projected our representation back. Let\'s look at the summary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s verify our understanding of the output projection.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess output projection functionality.',
+        script: 'Take a look at the quick check question. Think about how the output projection relates to the residual stream.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Now we proceed to adding this output back to the residual stream.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Emphasize that the Output Projection is the first time features from different heads actually mix mathematically.'
+      ],
+      misconceptions: [
+        'Clarify that Wo does not change the sequence length; it only mixes and projects the channel dimension.'
+      ],
+      suggestedQuestions: [
+        'What would happen to the residual stream if we omitted the output projection?'
+      ]
+    }
+  },
 };
 
 export function getSceneCopy(id) {
