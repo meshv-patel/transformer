@@ -189,6 +189,9 @@ output = {
         "Wq": round_list(W_q), "bq": round_list(b_q),
         "Wk": round_list(W_k), "bk": round_list(b_k),
         "Wv": round_list(W_v), "bv": round_list(b_v),
+        "Wo": round_list(W_o), "bo": round_list(b_o),
+        "W_ff1": round_list(W_ff1), "b_ff1": round_list(b_ff1),
+        "W_ff2": round_list(W_ff2), "b_ff2": round_list(b_ff2),
     },
     "stages": stages,
 }
@@ -196,4 +199,7 @@ output = {
 with open("../src/data/forward-pass.json", "w") as f:
     json.dump(output, f, indent=2)
 
-print(f"Wrote forward-pass.json with {len(stages)} stages for sentence: {' '.join(SENTENCE)}")
+with open("../public/data/forward-pass.json", "w") as f:
+    json.dump(output, f, indent=2)
+
+print(f"Wrote forward-pass.json (copies in src/data/ and public/data/) with {len(stages)} stages for sentence: {' '.join(SENTENCE)}")

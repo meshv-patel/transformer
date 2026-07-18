@@ -347,6 +347,578 @@ export const SCENE_COPY = {
       ],
     },
   },
+  'proj-q': {
+    eyebrow: 'Attention · Projection',
+    title: 'Linear Projection to Q',
+    fourQuestions: {
+      whatIsHappening: 'We multiply the position-aware token vectors by a learned Query weight matrix, creating a new vector space for Queries.',
+      why: 'Linear projection allows the model to learn what representation (e.g. Query, Key, Value) each token should assume when attending to other tokens.',
+      whatChanged: 'Each token\'s [d_model] vector is projected to a [d_model] Query vector (shape remains [seq_len, d_model]).',
+      whatToObserve: 'Observe how each token vector is multiplied by the weight matrix row-by-row to yield the corresponding Query vector.',
+    },
+    body: {
+      beginner: 'To figure out how words relate to each other, each word must ask questions about the other words. We multiply our word vectors by a special "Query" key matrix to produce these questions (Queries).',
+      mtech: 'Each position-aware vector x_pe is projected into the query space via Q = x_pe * W_q + b_q, where W_q is a learned parameter matrix of shape [d_model, d_model]. This projects the input into a space optimized for query-matching.',
+      research: 'Linear projections construct the query vectors. Because W_q is parameterized and optimized during training, it projects tokens into sub-spaces that emphasize query features. Output dimension is d_model, split later into multiple attention heads.',
+    },
+    deepDive: {
+      math: 'Q = X_{pe} W_q + b_q',
+      complexity: 'O(seq_len × d_model^2) operations.',
+      matrixEquivalence: 'Each token\'s Query vector is computed independently as a vector-matrix multiply. We multiply a [1, d_model] token vector by a [d_model, d_model] weight matrix to produce a [1, d_model] Query vector.',
+      misconceptions: [
+        'Queries are not computed from text labels; they are continuous activations derived entirely from the token embeddings and positional encodings.',
+      ],
+      notes: 'd_model = 16 for this visualization, yielding a 16x16 weight matrix.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need a separate Query matrix?',
+          body: 'A single vector cannot easily represent a word\'s meaning, its position, the questions it wants to ask, and the keys it answers all at the same time. The Query weight matrix lets the model extract just the "question-asking" features of each word.',
+        },
+        {
+          title: 'Why is it called a "Query"?',
+          body: 'Think of it like a search engine: the Query represents the search term ("what I am looking for"). In self-attention, each word queries all other words to find out which ones it should pay attention to.',
+        }
+      ],
+      example: {
+        left: [0.1, -0.2, 0.4, 0.3, -0.1, 0.2, 0.05, -0.15, 0.25, 0.1, -0.05, 0.12, 0.0, -0.1, 0.3, -0.2],
+        right: [0.35, 0.12, -0.05, -0.2, 0.4, 0.05, -0.1, 0.15, -0.3, 0.2, 0.12, -0.05, 0.18, 0.25, -0.12, 0.05],
+        caption: 'Input token vector vs. projected Query vector — the Query projection focuses on search features.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Input Vectors', shape: null },
+      after: { label: 'Query Vectors', shape: null },
+      whatChanged: 'We projected the position-aware token vectors into the Query vector space.',
+      structured: {
+        entered: 'Position-aware token vectors X_pe of shape [seq_len, d_model].',
+        happened: 'Matrix multiplication with learned Query weight matrix W_q.',
+        changed: 'Vectors are rotated/scaled into the query feature space.',
+        leaves: 'Query vectors Q of shape [seq_len, d_model], ready to match against Keys.',
+      }
+    },
+    quickCheck: {
+      question: 'What is the purpose of projecting a token vector to a Query vector?',
+      choices: [
+        'To prepare it to ask questions about other tokens in the attention step.',
+        'To merge it with the positional encoding information.',
+        'To reduce its dimensionality to save compute.',
+        'To look up its semantic meaning in the vocabulary table.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The Query vector represents "what this token is looking for" in other tokens. It will be dot-multiplied with Key vectors from other tokens to determine attention weights.',
+      transition: 'Next, we project the tokens to Keys (K) so they can be matched against these Queries.',
+      distractorNotes: {
+        1: 'Incorrect. Positional encoding was already added in the previous scene.',
+        2: 'Incorrect. Projection to Q maintains the same d_model dimensionality (16) here.',
+        3: 'Incorrect. Vocabulary lookup is done during the Word Embedding scene.'
+      }
+    },
+    pytorch: [
+      { id: 'code-proj-q', code: 'Q = self.W_q(x)  # [seq_len, d_model] -> [seq_len, d_model]' }
+    ],
+    equationTerms: [
+      { id: 'eq-proj-q', tex: 'Q = X_{pe} W_q' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-proj-q', codeLineId: 'code-proj-q' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Introduce the concept of a weight matrix for projection.',
+        script: 'To find out how words relate, each word needs to ask questions of the others. We do this by projecting our vectors into a query space. Here is the query weight matrix W_q. It is a sixteen by sixteen table of learned parameters, initialized randomly and tuned during training.',
+        audienceQuestion: 'Why is the weight matrix square at sixteen by sixteen?',
+        expectedAnswer: 'Because both our input dimension and query output dimension are d_model, which is sixteen.',
+        misconception: 'Students often think the weight matrix values are fixed; remind them these are learned parameters updated via backpropagation.',
+        transition: 'Now, let\'s multiply our input vectors by this matrix to see how queries materialize.'
+      },
+      {
+        duration: '~45s',
+        objective: 'Demonstrate matrix multiplication element-by-element.',
+        script: 'By multiplying our input vectors by the query weight matrix, we project them. Notice how each token\'s vector is dot-multiplied against the columns of the weight matrix. Each resulting cell represents a projection of that token\'s features onto a specific query dimension.',
+        audienceQuestion: 'Does the calculation of one token\'s Query depend on the other tokens?',
+        expectedAnswer: 'No, each token\'s projection is completely independent of the others at this stage.',
+        misconception: 'Some think self-attention mixing happens here. Clarify that this is a purely token-local operation; mixing only happens in the attention score step.',
+        transition: 'Let\'s summarize what this operation accomplished.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Draw an analogy to database queries: the Query is the search query, the Key is the index key, and the Value is the actual record content.'
+      ],
+      misconceptions: [
+        'Emphasize that the projection is a purely linear transformation (no activation function is applied here, unlike in the Feed Forward Network).'
+      ],
+      suggestedQuestions: [
+        'What would happen if we didn\'t use a projection matrix and instead matched the inputs directly?'
+      ]
+    }
+  },
+  'qk-matmul': {
+    eyebrow: 'Attention · Matching',
+    title: 'Q × Kᵀ (Scaled Attention Scores)',
+    fourQuestions: {
+      whatIsHappening: 'We multiply the Query matrix Q by the transpose of the Key matrix K, scaling the result by 1/sqrt(d_k).',
+      why: 'This compares every word\'s query vector against every other word\'s key vector to calculate raw, pairwise relevance scores.',
+      whatChanged: 'Two [seq_len, d_model] matrices are multiplied and scaled to produce a [heads, seq_len, seq_len] attention score tensor.',
+      whatToObserve: 'Hover over cells to see how the Query of a row token matches the Key of a column token — values represent search relevance.',
+    },
+    body: {
+      beginner: 'To figure out which words relate, each word matches its "Query" (the question it asks) against all other words\' "Keys" (the topics they cover). High scores mean a strong connection.',
+      mtech: 'The raw attention scores are computed as S = (Q * K^T) / sqrt(d_k). This performs pairwise dot products between all query vectors and key vectors. The scaling factor of 1/sqrt(d_k) prevents the dot products from growing excessively large for high dimensions, which would push the softmax gradients to near-zero.',
+      research: 'Scaled dot-product attention computes similarity between Query and Key representations. Transposing K enables parallel matmul. Scaling by 1/sqrt(d_k) is mathematically crucial: assuming elements of q and k are independent random variables with mean 0 and variance 1, their dot product has mean 0 and variance d_k. Scaling restores variance to 1, ensuring stable softmax updates.',
+    },
+    deepDive: {
+      math: 'S = \\frac{Q K^T}{\\sqrt{d_k}}',
+      complexity: 'O(seq_len^2 × d_model) operations per attention head.',
+      matrixEquivalence: 'The scores matrix represents all pairwise dot products. Cell (r, c) represents the dot product of the r-th Query vector and the c-th Key vector, divided by the square root of d_k.',
+      misconceptions: [
+        'These scores are not probabilities yet — they can be negative or greater than 1. They are normalized into weights by the Softmax step next.',
+      ],
+      notes: 'd_k = d_model / num_heads = 16 / 4 = 4. The scaling factor is 1/sqrt(4) = 0.5.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why multiply Q by K transpose?',
+          body: 'We want to match every Query row with every Key column. Transposing K flips its shape from [seq_len, d_k] to [d_k, seq_len], allowing a single standard matrix multiplication to compute all combinations at once.',
+        },
+        {
+          title: 'Why divide by the square root of d_k?',
+          body: 'In higher dimensions, dot products tend to grow very large. This makes the softmax function peak, putting almost all weight on a single item and causing vanishing gradients during training. Scaling keeps the variance stable.',
+        }
+      ],
+      example: {
+        left: [0.15, -0.05, 0.45, -0.3],
+        right: [1.2, -0.4, 2.5, 0.85],
+        caption: 'Unscaled dot product values can exceed 2.0; scaling divider pushes them back to stable ranges.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Query & Key Vectors', shape: null },
+      after: { label: 'Attention Scores', shape: null },
+      whatChanged: 'We computed the pairwise relevance between every token\'s Query and Key representation.',
+      structured: {
+        entered: 'Query (Q) and Key (K) matrices of shape [seq_len, d_model] per head.',
+        happened: 'Matrix multiplication of Q and transpose of K, divided by square root of d_k.',
+        changed: 'Extracted raw similarity scores for all token pairs.',
+        leaves: 'An attention score grid of shape [heads, seq_len, seq_len].',
+      }
+    },
+    quickCheck: {
+      question: 'Why do we scale the attention scores by 1/sqrt(d_k) before softmax?',
+      choices: [
+        'To prevent extremely large dot products from causing vanishing gradients.',
+        'To compress the vectors to fit in browser memory.',
+        'To force the attention scores to sum to exactly 1.0.',
+        'To align the token vectors with the positional encodings.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Without scaling, large dot products in high-dimensional spaces push the softmax function into regions with extremely small gradients, slowing down or halting backpropagation training.',
+      transition: 'Now that we have raw matching scores, how do we turn them into real percentages? That\'s Softmax, next.',
+      distractorNotes: {
+        1: 'Incorrect. Browser memory is not affected by this mathematical scaling.',
+        2: 'Incorrect. Softmax is what forces the rows to sum to 1.0, not the scaling division.',
+        3: 'Incorrect. Positional encoding was already added earlier in the pipeline.'
+      }
+    },
+    pytorch: [
+      { id: 'code-qk-matmul', code: 'scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(d_k)' }
+    ],
+    equationTerms: [
+      { id: 'eq-qk-matmul', tex: 'S = \\frac{Q K^T}{\\sqrt{d_k}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-qk-matmul', codeLineId: 'code-qk-matmul' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain the Query-Key dot product relevance matching.',
+        script: 'Now we match our queries against the keys. We multiply the Query matrix Q by the transpose of the Key matrix K. Each cell in this grid represents the dot product of a specific Query vector and Key vector, scaled down by the square root of d_k.',
+        audienceQuestion: 'What does a high value in the grid represent?',
+        expectedAnswer: 'It means that the Query of the row token is highly relevant to the Key of the column token.',
+        misconception: 'Some think these values are final attention percentages; clarify that they are unnormalized scores and can be negative.',
+        transition: 'Let\'s see what we are left with shape-wise.'
+      },
+      {
+        duration: '~25s',
+        objective: 'Review the shape change to [seq_len, seq_len].',
+        script: 'Our matrices went from d_model dimensions to a square grid of sequence length by sequence length. In this grid, every word is mapped against every other word, including itself. The shape is now heads by four by four.',
+        audienceQuestion: 'Why does each head have its own grid?',
+        expectedAnswer: 'Because each head represents a different attention subspace, looking for different types of relationships.',
+        misconception: 'Explain that the heads are computed completely in parallel.',
+        transition: 'Let\'s check our understanding of the scaling factor.'
+      },
+      {
+        duration: '~40s',
+        objective: 'Reinforce the mathematical motivation for scaling.',
+        script: 'Take a look at the quick check question. Consider what would happen if the vector dimensions got extremely large during training, and how that relates to the softmax curves.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Perfect. Let\'s move on to normalizing these scores into probabilities.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Spend a minute explaining the transpose operation visually: it flips K so rows become columns, which makes the dot products align naturally in standard matrix multiplication.'
+      ],
+      misconceptions: [
+        'Clarify that dividing by sqrt(d_k) is a scaling step to preserve variance, not a normalization step like layer norm.'
+      ],
+      suggestedQuestions: [
+        'How does changing the number of heads impact the scale factor?'
+      ]
+    }
+  },
+  'proj-k': {
+    eyebrow: 'Attention · Projection',
+    title: 'Linear Projection to K',
+    fourQuestions: {
+      whatIsHappening: 'We multiply the position-aware token vectors by a learned Key weight matrix, creating a new vector space for Keys.',
+      why: 'Linear projection allows the model to learn what features each token should contain when answering queries from other tokens.',
+      whatChanged: 'Each token\'s [d_model] vector is projected to a [d_model] Key vector (shape remains [seq_len, d_model]).',
+      whatToObserve: 'Observe how each token vector is multiplied by the Key weight matrix row-by-row to yield the corresponding Key vector.',
+    },
+    body: {
+      beginner: 'Next, we need to create "Keys" for each word. If a Query represents a question, a Key represents a list of topics that word can speak about. We multiply our vectors by a "Key" weights matrix.',
+      mtech: 'Each position-aware vector x_pe is projected into the key space via K = x_pe * W_k + b_k, where W_k is a learned parameter matrix of shape [d_model, d_model]. This extracts features optimized for key-matching.',
+      research: 'Linear projections construct the key vectors. Like W_q, W_k is parameterized and optimized during training to map token embeddings into a matching space compatible with Query projections.',
+    },
+    deepDive: {
+      math: 'K = X_{pe} W_k + b_k',
+      complexity: 'O(seq_len × d_model^2) operations.',
+      matrixEquivalence: 'Each token\'s Key vector is computed independently as a vector-matrix multiply of the input vector by the [d_model, d_model] weight matrix W_k.',
+      misconceptions: [
+        'Keys are not static; they represent dynamic contextual features that are compared to Queries during the dot-product matching step.',
+      ],
+      notes: 'd_model = 16 for this visualization, yielding a 16x16 weight matrix W_k.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need a separate Key matrix?',
+          body: 'A word should answer questions differently depending on what is being asked. The Key matrix focuses the word\'s representation on its potential to address other words\' Queries.',
+        },
+        {
+          title: 'How does this compare to W_q?',
+          body: 'While W_q extracts query features ("what I want to know"), W_k extracts key features ("what I can offer"). Having independent parameters lets the model learn asymmetric relationships.',
+        }
+      ],
+      example: {
+        left: [0.1, -0.2, 0.4, 0.3, -0.1, 0.2, 0.05, -0.15, 0.25, 0.1, -0.05, 0.12, 0.0, -0.1, 0.3, -0.2],
+        right: [-0.15, 0.3, 0.12, -0.4, 0.05, -0.2, 0.1, -0.05, 0.22, -0.18, 0.05, 0.12, -0.05, 0.25, -0.12, 0.15],
+        caption: 'Input token vector vs. projected Key vector — Key projection focuses on indexing features.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Input Vectors', shape: null },
+      after: { label: 'Key Vectors', shape: null },
+      whatChanged: 'We projected the position-aware token vectors into the Key vector space.',
+      structured: {
+        entered: 'Position-aware token vectors X_pe of shape [seq_len, d_model].',
+        happened: 'Matrix multiplication with learned Key weight matrix W_k.',
+        changed: 'Vectors are rotated/scaled into the key index space.',
+        leaves: 'Key vectors K of shape [seq_len, d_model], ready for dot-product matching.',
+      }
+    },
+    quickCheck: {
+      question: 'What is the relationship between the Query (Q) and Key (K) representations?',
+      choices: [
+        'Queries represent search terms; Keys represent searchable indexes.',
+        'Queries represent values; Keys represent mathematical signs.',
+        'Queries and Keys are mathematically identical vectors.',
+        'Queries represent input text; Keys represent output translations.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Think of Queries as search keywords and Keys as labels or indexes. We compute dot products between them to determine which Queries match which Keys.',
+      transition: 'Now, we project the tokens to Values (V) so we have actual content to fetch.',
+      distractorNotes: {
+        1: 'Incorrect. Values are represented by a separate matrix (V) which we project next.',
+        2: 'Incorrect. Queries and Keys are projected via separate weight matrices (W_q and W_k) and are not identical.',
+        3: 'Incorrect. Both Q and K are intermediate layers inside the Attention mechanism.'
+      }
+    },
+    pytorch: [
+      { id: 'code-proj-k', code: 'K = self.W_k(x)  # [seq_len, d_model] -> [seq_len, d_model]' }
+    ],
+    equationTerms: [
+      { id: 'eq-proj-k', tex: 'K = X_{pe} W_k' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-proj-k', codeLineId: 'code-proj-k' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Introduce the Key weight matrix W_k.',
+        script: 'To be searchable by other words, each word must represent its key features. Here is the Key weight matrix W_k, which maps our input vectors into Key vectors.',
+        audienceQuestion: 'Why can\'t we reuse W_q for Keys?',
+        expectedAnswer: 'Because asking questions and answering them require different semantic focuses. Keeping them separate allows asymmetric attention.',
+        misconception: 'Remind students that W_k contains parameters learned during training.',
+        transition: 'Let\'s perform the matrix multiplication to compute the Keys.'
+      },
+      {
+        duration: '~45s',
+        objective: 'Demonstrate Key vector calculations.',
+        script: 'We project the inputs into Key space. Observe the row-by-column multiplications of the positional-encoded tokens with W_k to produce the Key matrix.',
+        audienceQuestion: 'Does the Key projection change the shape of our token sequence?',
+        expectedAnswer: 'No, the sequence length and dimension remain four by sixteen.',
+        misconception: 'Confirm that these are raw keys, not yet matched against queries.',
+        transition: 'Let\'s consolidate this step.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Emphasize that the Key projection runs completely in parallel for all tokens.'
+      ],
+      misconceptions: [
+        'Point out that W_k is completely separate from W_q and has different learned weights.'
+      ],
+      suggestedQuestions: [
+        'What would happen if W_k was set to the identity matrix?'
+      ]
+    }
+  },
+  'proj-v': {
+    eyebrow: 'Attention · Projection',
+    title: 'Linear Projection to V',
+    fourQuestions: {
+      whatIsHappening: 'We multiply the position-aware token vectors by a learned Value weight matrix, creating a new vector space for Values.',
+      why: 'Linear projection allows the model to extract the actual content (information) that each token will contribute to other tokens.',
+      whatChanged: 'Each token\'s [d_model] vector is projected to a [d_model] Value vector (shape remains [seq_len, d_model]).',
+      whatToObserve: 'Observe how each token vector is multiplied by the Value weight matrix row-by-row to yield the corresponding Value vector.',
+    },
+    body: {
+      beginner: 'Finally, we need to create "Values" for each word. If Q is the question and K is the label, V is the actual content or meaning of the word. We multiply our vectors by a "Value" weights matrix.',
+      mtech: 'Each position-aware vector x_pe is projected into the value space via V = x_pe * W_v + b_v, where W_v is a learned parameter matrix of shape [d_model, d_model]. This extracts semantic values.',
+      research: 'Linear projections construct the value vectors. Like W_q and W_k, W_v is parameterized and optimized during training to extract the content representation that will be aggregated in the attention summation step.',
+    },
+    deepDive: {
+      math: 'V = X_{pe} W_v + b_v',
+      complexity: 'O(seq_len × d_model^2) operations.',
+      matrixEquivalence: 'Each token\'s Value vector is computed independently as a vector-matrix multiply of the input vector by the [d_model, d_model] weight matrix W_v.',
+      misconceptions: [
+        'Value vectors are not static vocabulary definitions; they represent contextual representations shaped by training.',
+      ],
+      notes: 'd_model = 16 for this visualization, yielding a 16x16 weight matrix W_v.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need a separate Value matrix?',
+          body: 'A word\'s role in asking questions (Q) or indexing itself (K) is different from the actual content (V) it passes forward. The Value matrix extracts this raw content.',
+        },
+        {
+          title: 'What happens to V after projection?',
+          body: 'Values are weighted by the attention scores and summed. If attention scores determine "where to look," V represents "what is actually seen."',
+        }
+      ],
+      example: {
+        left: [0.1, -0.2, 0.4, 0.3, -0.1, 0.2, 0.05, -0.15, 0.25, 0.1, -0.05, 0.12, 0.0, -0.1, 0.3, -0.2],
+        right: [0.25, -0.12, 0.05, 0.18, -0.3, 0.22, 0.08, -0.15, 0.1, 0.05, -0.25, 0.12, -0.05, 0.35, -0.2, 0.08],
+        caption: 'Input token vector vs. projected Value vector — Value projection extracts content features.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Input Vectors', shape: null },
+      after: { label: 'Value Vectors', shape: null },
+      whatChanged: 'We projected the position-aware token vectors into the Value vector space.',
+      structured: {
+        entered: 'Position-aware token vectors X_pe of shape [seq_len, d_model].',
+        happened: 'Matrix multiplication with learned Value weight matrix W_v.',
+        changed: 'Vectors are rotated/scaled into the value content space.',
+        leaves: 'Value vectors V of shape [seq_len, d_model], ready to be aggregated.',
+      }
+    },
+    quickCheck: {
+      question: 'What is the role of Value (V) vectors in the attention calculation?',
+      choices: [
+        'They represent the actual content that is aggregated based on attention weights.',
+        'They are used to calculate the matching scores between tokens.',
+        'They represent the positional encoding shift applied to token embeddings.',
+        'They are used to normalize the softmax probabilities.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! While Queries and Keys determine "how much" words should focus on each other, the Value vectors represent the actual content that is extracted and combined based on those weights.',
+      transition: 'Now that we have projected Q, K, and V, we split them into multiple heads. Let\'s see that next.',
+      distractorNotes: {
+        1: 'Incorrect. Queries and Keys calculate the matching scores, not Values.',
+        2: 'Incorrect. Positional encoding was added before the projection layer.',
+        3: 'Incorrect. Softmax is a mathematical function that does not use Value vectors.'
+      }
+    },
+    pytorch: [
+      { id: 'code-proj-v', code: 'V = self.W_v(x)  # [seq_len, d_model] -> [seq_len, d_model]' }
+    ],
+    equationTerms: [
+      { id: 'eq-proj-v', tex: 'V = X_{pe} W_v' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-proj-v', codeLineId: 'code-proj-v' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Introduce the Value weight matrix W_v.',
+        script: 'Finally, we need to extract the actual content that each word will pass forward. We multiply our input vectors by the Value weight matrix W_v.',
+        audienceQuestion: 'Why do we need a separate matrix for Values?',
+        expectedAnswer: 'Because the content a word transmits should be separate from the features it uses to match queries and keys.',
+        misconception: 'Make sure students realize that V contains the raw content to be mixed.',
+        transition: 'Let\'s compute the Value vectors.'
+      },
+      {
+        duration: '~45s',
+        objective: 'Demonstrate Value vector calculations.',
+        script: 'Multiplying by W_v yields the Value vectors. Each cell in the output represents projected content information for that token.',
+        audienceQuestion: 'What is the shape of the Value output?',
+        expectedAnswer: 'It is still four by sixteen, matching our input shape.',
+        misconception: 'Emphasize that the actual mixing of values across words does not happen here.',
+        transition: 'Let\'s summarize the Value projection.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Use the post-office analogy: Q is the return address/question, K is the routing index/key, and V is the actual letter contents.'
+      ],
+      misconceptions: [
+        'Highlight that V projections are also independent for each token.'
+      ],
+      suggestedQuestions: [
+        'How would the model change if we omitted W_v?'
+      ]
+    }
+  },
+  'scale-softmax': {
+    eyebrow: 'Attention · Normalization',
+    title: 'Scaling & Softmax',
+    fourQuestions: {
+      whatIsHappening: 'We divide the raw attention scores by the square root of the head dimension d_k, and apply the softmax function row-wise.',
+      why: 'Scaling stabilizes gradients during training; softmax converts scores into positive weights between 0 and 1 that sum to 1.0, representing relevance percentages.',
+      whatChanged: 'Unnormalized raw matching scores are converted into normalized attention probabilities (still shape [heads, seq_len, seq_len]).',
+      whatToObserve: 'Compare Step 0 (Scaled Scores) with Step 1 (Softmax Weights). Notice how negative numbers disappear and cell values in each row sum to exactly 1.0.',
+    },
+    body: {
+      beginner: 'To turn raw scores into final percentages, we scale them down and apply "Softmax". This ensures that for every word, the attention percentages it gives to other words are all positive and add up to exactly 100%.',
+      mtech: 'The scaling step divides scores by sqrt(d_k), where d_k = 4. The softmax operator is defined as A_{i,j} = exp(S_{i,j}) / sum_k(exp(S_{i,k})), normalizing each row into a probability distribution.',
+      research: 'Row-wise softmax is applied to the scaled attention scores. Softmax acts as a continuous, differentiable approximation of argmax. Scaling by 1/sqrt(d_k) is critical for training stability: with high values of d_k, dot product magnitudes push softmax inputs into regions with vanishingly small gradients.',
+    },
+    deepDive: {
+      math: 'A = \\text{Softmax}\\left(\\frac{Q K^T}{\\sqrt{d_k}}\\right)',
+      complexity: 'O(seq_len^2) exponentiations and normalization operations.',
+      matrixEquivalence: 'The resulting weights represent the relative focus each token places on all other tokens. Summing along the columns for any row yields 1.0.',
+      misconceptions: [
+        'Softmax is applied independently to each row (token) and each head. It is not a global normalization over the entire matrix.',
+      ],
+      notes: 'd_k = 4. Dividing by sqrt(4) = 2.0 halves the score magnitudes. Notice the peak scores compress, leading to gentler probability slopes.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need softmax?',
+          body: 'We need to convert raw similarity scores into weights so we can compute a weighted average of the Value vectors. Softmax outputs sum to 1.0, which acts as a standard mathematical blending ratio.',
+        },
+        {
+          title: 'What does softmax do to extreme values?',
+          body: 'Softmax exponentiates values, which exponentiates differences: large values become very dominant, while small values are suppressed close to zero.',
+        }
+      ],
+      example: {
+        left: [2.5, 1.0, -0.5, 0.2],
+        right: [0.73, 0.16, 0.04, 0.07],
+        caption: 'Raw scaled scores (left) mapped through softmax into weights (right). Exponents accentuate the largest score.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Scaled Scores S', shape: null },
+      after: { label: 'Attention Weights A', shape: null },
+      whatChanged: 'We normalized the raw scores into a valid probability distribution where each row sums to 1.0.',
+      structured: {
+        entered: 'Scaled attention scores of shape [heads, seq_len, seq_len].',
+        happened: 'Applied exponentiation and normalized by the row-wise sum.',
+        changed: 'All negative scores are eliminated, and values are compressed to [0, 1] range.',
+        leaves: 'Attention weights matrix A of shape [heads, seq_len, seq_len].',
+      }
+    },
+    quickCheck: {
+      question: 'What is the sum of attention weights across any single row of the softmax output matrix?',
+      choices: [
+        'Exactly 1.0 (or 100%)',
+        'It depends on the sequence length.',
+        'It is equal to the scale factor sqrt(d_k).',
+        '0.0, because raw scores can be negative.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The softmax function divides the exponent of each score by the sum of exponents for that row, forcing the final weights along any row to sum to exactly 1.0.',
+      transition: 'Now that we have the exact weight percentages, we use them to average our Value vectors. Let\'s see that in Weighted Sum.',
+      distractorNotes: {
+        1: 'Incorrect. The sum of softmax outputs is always 1.0 regardless of how many elements are in the row.',
+        2: 'Incorrect. Sqrt(d_k) is the scaling divisor, not the sum of weights.',
+        3: 'Incorrect. Exponentiation maps all inputs to positive numbers, so the sum cannot be negative or zero.'
+      }
+    },
+    pytorch: [
+      { id: 'code-scale-softmax', code: 'weights = torch.softmax(scores, dim=-1)' }
+    ],
+    equationTerms: [
+      { id: 'eq-scale-softmax', tex: 'A = \\text{Softmax}\\left(\\frac{Q K^T}{\\sqrt{d_k}}\\right)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-matmul', equationTermId: 'eq-scale-softmax', codeLineId: 'code-scale-softmax' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain the scaling division.',
+        script: 'First, we scale the dot products by dividing them by the square root of the key dimension d_k. This helps control the magnitude of values going into softmax.',
+        audienceQuestion: 'Why do we scale before softmax instead of after?',
+        expectedAnswer: 'Because if raw scores are too large, the softmax exponents will saturate, leading to near-zero gradients during training.',
+        misconception: 'Make sure students notice that the values in this first step do not sum to 1.0 yet.',
+        transition: 'Now let\'s apply softmax to normalize these scores.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain the softmax row-wise probability distribution.',
+        script: 'Next, we compute the softmax row-by-row. This exponentiates each score and divides it by the row-wise sum. Notice how all negative scores disappear, and every row now sums to exactly 1.0.',
+        audienceQuestion: 'Which token gets the highest attention in this row?',
+        expectedAnswer: 'The cell with the brightest orange color, representing the largest percentage.',
+        misconception: 'Some think columns sum to 1.0; emphasize that normalization occurs independently along each row.',
+        transition: 'Let\'s summarize the transition.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review the shape and values of the softmax weights.',
+        script: 'We have converted our unnormalized matching scores into percentages. The shape remains heads by sequence length by sequence length.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Reinforce the row-sum constraint.',
+        script: 'Answer the quick check question. Consider what properties are required for a set of numbers to act as blending coefficients.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Great. Now we aggregate our values using these weights.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Have students hover over row cells to verify that the numbers printed in the cell box sum to 1.0 for that row.'
+      ],
+      misconceptions: [
+        'Clarify that softmax does not change the shape of the tensor; it only scales and normalizes the scalar cell values.'
+      ],
+      suggestedQuestions: [
+        'What would happen if one score in a row was extremely large compared to all others?'
+      ]
+    }
+  },
 };
 
 export function getSceneCopy(id) {
