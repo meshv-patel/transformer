@@ -19,12 +19,12 @@ export const SCENES = [
   { id: 'heads-compare',    group: 'Attention', title: 'Individual Attention Heads',subSteps: ['per-head-heatmaps', 'before-after', 'quick-check'] },
   { id: 'concat',           group: 'Attention', title: 'Concatenation',             subSteps: ['stitch-heads', 'before-after', 'quick-check'] },
   { id: 'output-proj',      group: 'Attention', title: 'Output Projection (Wo)',    subSteps: ['weight-matrix', 'matmul', 'before-after', 'quick-check'] },
-  { id: 'residual-1',       group: 'Attention', title: 'Residual Connection',       subSteps: ['add-back'] },
-  { id: 'layer-norm-1',     group: 'Attention', title: 'Layer Normalization',       subSteps: ['normalize'] },
+  { id: 'residual-1',       group: 'Attention', title: 'Residual Connection',       subSteps: ['main-path', 'skip-path', 'addition', 'before-after', 'quick-check'] },
+  { id: 'layer-norm-1',     group: 'Attention', title: 'Layer Normalization',       subSteps: ['statistics', 'normalize', 'scale-shift', 'before-after', 'quick-check'] },
 
   { id: 'ffn',              group: 'FeedFwd',   title: 'Feed Forward Network',      subSteps: ['expand', 'relu', 'project-back'] },
-  { id: 'residual-2',       group: 'FeedFwd',   title: 'Residual Connection',       subSteps: ['add-back'] },
-  { id: 'layer-norm-2',     group: 'FeedFwd',   title: 'Layer Normalization',       subSteps: ['normalize'] },
+  { id: 'residual-2',       group: 'FeedFwd',   title: 'Residual Connection',       subSteps: ['main-path', 'skip-path', 'addition', 'before-after', 'quick-check'] },
+  { id: 'layer-norm-2',     group: 'FeedFwd',   title: 'Layer Normalization',       subSteps: ['statistics', 'normalize', 'scale-shift', 'before-after', 'quick-check'] },
   { id: 'encoder-output',   group: 'FeedFwd',   title: 'Encoder Output',            subSteps: ['final-representation'] },
 ];
 

@@ -4,9 +4,7 @@
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
   import { dModel as configDModel, numHeads as configNumHeads, dK as configDK } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
-  import { generateEmbeddingVector } from '../core/embedding-utils.js';
-  import { sinusoidalPETable, addVectors } from '../core/positional-encoding.js';
-  import { matmul, splitHeads, scale, transpose } from '../core/tensor-ops.js';
+  import { splitHeads, computeAttentionPipeline } from '../core/tensor-ops.js';
   import { getSceneCopy } from '../data/scene-copy.js';
   import { focusShot } from '../core/camera/cameraStore.js';
   import { motionMs, prefersReducedMotion } from '../core/motion.js';
@@ -19,10 +17,13 @@
 
   const STEP = { RESHAPE: 0, TRANSPOSE: 1, SUMMARY: 2, QUIZ: 3 };
 
+  export let mode = undefined;
+
   // Resolve scene config
   $: sceneId = $currentScene?.id;
   $: copy = getSceneCopy(sceneId);
-  $: isConcatScene = sceneId === 'concat';
+  $: activeMode = mode || (sceneId === 'concat' ? 'concat' : 'split');
+  $: isConcatScene = activeMode === 'concat';
 
   // Interactive sentence builder state
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
@@ -57,89 +58,20 @@
   $: projQStage = $forwardPassData?.stages?.find((s) => s.id === 'proj-q') ?? null;
   $: precomputedQ = projQStage?.tokenVectors ?? [];
 
-  // Live Q projection calculation for Interactive Mode
-  $: interactiveQ = computeInteractiveQ(activeSentence, currentDModel);
-
-  function computeInteractiveQ(sentence, dModelVal) {
-    if (!sentence || !sentence.length) return [];
-    const embeds = sentence.map((w) => generateEmbeddingVector(w, dModelVal));
-    const pes = sinusoidalPETable(sentence.length, dModelVal);
-    const xPe = embeds.map((e, i) => addVectors(e, pes[i]));
-
-    const Wq = lectureWeights.Wq;
-    const bq = lectureWeights.bq || new Array(dModelVal).fill(0);
-    if (!Wq) return [];
-    return matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
-  }
-
-  // Live Concatenated Weighted Sum calculation for Interactive Mode
-  $: interactiveWeightedSum = computeInteractiveWeightedSum(activeSentence, currentDModel, numHeadsVal, dKVal);
-
-  function computeInteractiveWeightedSum(sentence, dModelVal, numHeadsVal, dKVal) {
-    if (!sentence || !sentence.length) return [];
-
-    // Get input vectors X_pe
-    const embeds = sentence.map((w) => generateEmbeddingVector(w, dModelVal));
-    const pes = sinusoidalPETable(sentence.length, dModelVal);
-    const xPe = embeds.map((e, i) => addVectors(e, pes[i]));
-
-    // Extract weights
-    const Wq = lectureWeights.Wq;
-    const bq = lectureWeights.bq || new Array(dModelVal).fill(0);
-    const Wk = lectureWeights.Wk;
-    const bk = lectureWeights.bk || new Array(dModelVal).fill(0);
-    const Wv = lectureWeights.Wv;
-    const bv = lectureWeights.bv || new Array(dModelVal).fill(0);
-
-    if (!Wq || !Wk || !Wv) return [];
-
-    // Compute projections
-    const Q = matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
-    const K = matmul(xPe, Wk).map((row) => row.map((v, c) => v + bk[c]));
-    const V = matmul(xPe, Wv).map((row) => row.map((v, c) => v + bv[c]));
-
-    // Split
-    const Qh = splitHeads(Q, numHeadsVal);
-    const Kh = splitHeads(K, numHeadsVal);
-    const Vh = splitHeads(V, numHeadsVal);
-
-    // Compute weights and outputs per head
-    const outConcatenated = Array.from({ length: sentence.length }, () => new Array(dModelVal).fill(0));
-
-    for (let h = 0; h < numHeadsVal; h++) {
-      const qHead = Qh[h];
-      const kHead = Kh[h];
-      const vHead = Vh[h];
-
-      // Attention scores -> Softmax weights
-      const headScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(dKVal));
-      const softmaxRows = (mat) => mat.map((row) => {
-        const max = Math.max(...row);
-        const exps = row.map((v) => Math.exp(v - max));
-        const sum = exps.reduce((a, b) => a + b, 0);
-        return exps.map((v) => v / sum);
-      });
-      const headWeights = softmaxRows(headScores);
-
-      // Weighted sum output per head
-      const headOutput = matmul(headWeights, vHead);
-
-      // Populate concatenated representation
-      for (let i = 0; i < sentence.length; i++) {
-        for (let d = 0; d < dKVal; d++) {
-          outConcatenated[i][h * dKVal + d] = headOutput[i][d];
-        }
-      }
-    }
-
-    return outConcatenated;
-  }
+  // Live calculations for Interactive Mode
+  $: interactiveData = computeAttentionPipeline(
+    activeSentence,
+    currentDModel,
+    numHeadsVal,
+    dKVal,
+    lectureWeights
+  );
 
   // Resolve input matrix: Q for split-heads, Concatenated Weighted Sum for concat
   $: precomputedWS = $forwardPassData?.stages?.find((s) => s.id === 'weighted-sum')?.tokenVectors ?? [];
   $: inputMatrix = isConcatScene
-    ? ($dataMode === 'lecture' ? precomputedWS : interactiveWeightedSum)
-    : ($dataMode === 'lecture' ? precomputedQ : interactiveQ);
+    ? ($dataMode === 'lecture' ? precomputedWS : (interactiveData?.concatenatedOutput ?? []))
+    : ($dataMode === 'lecture' ? precomputedQ : (interactiveData?.Q ?? []));
 
   // Reactively compute the reshaped matrix [seq_len, num_heads, d_k]
   $: reshapedMatrix = Array.from({ length: seqLen }, (_, i) => {

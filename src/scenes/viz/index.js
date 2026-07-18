@@ -4,6 +4,8 @@ import LinearProjectionViz from '../../components/LinearProjectionViz.svelte';
 import MatrixHeatmap from '../../components/MatrixHeatmap.svelte';
 import WeightedSumViz from '../../components/WeightedSumViz.svelte';
 import HeadsSplitViz from '../../components/HeadsSplitViz.svelte';
+import ResidualConnectionViz from '../../components/ResidualConnectionViz.svelte';
+import LayerNormViz from '../../components/LayerNormViz.svelte';
 
 export const SCENE_VIZ = {
   embedding: EmbeddingViz,
@@ -18,6 +20,10 @@ export const SCENE_VIZ = {
   'heads-compare': MatrixHeatmap,
   'concat': HeadsSplitViz,
   'output-proj': LinearProjectionViz,
+  'residual-1': ResidualConnectionViz,
+  'residual-2': ResidualConnectionViz,
+  'layer-norm-1': LayerNormViz,
+  'layer-norm-2': LayerNormViz,
   // Phase 4 adds the rest here, one at a time, each following
   // EmbeddingViz.svelte's pattern.
 };

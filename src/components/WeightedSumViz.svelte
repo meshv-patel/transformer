@@ -5,9 +5,7 @@
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
   import { dModel as configDModel, numHeads as configNumHeads, dK as configDK } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
-  import { generateEmbeddingVector } from '../core/embedding-utils.js';
-  import { sinusoidalPETable, addVectors } from '../core/positional-encoding.js';
-  import { matmul, splitHeads, scale, transpose } from '../core/tensor-ops.js';
+  import { computeAttentionPipeline } from '../core/tensor-ops.js';
   import { getSceneCopy } from '../data/scene-copy.js';
   import { focusShot } from '../core/camera/cameraStore.js';
   import { motionMs, prefersReducedMotion } from '../core/motion.js';
@@ -72,76 +70,13 @@
   $: precomputedConcatenatedOutput = lectureWeightedSumStage?.tokenVectors ?? [];
 
   // Live Interactive Calculations
-  $: interactiveData = computeInteractiveState(activeSentence, currentDModel, configNumHeadsVal, configDKVal);
-
-  function computeInteractiveState(sentence, dModelVal, numHeadsVal, dKVal) {
-    if (!sentence || !sentence.length) return null;
-
-    // 1. Get input vectors X_pe
-    const embeds = sentence.map((w) => generateEmbeddingVector(w, dModelVal));
-    const pes = sinusoidalPETable(sentence.length, dModelVal);
-    const xPe = embeds.map((e, i) => addVectors(e, pes[i]));
-
-    // 2. Extract weights
-    const Wq = lectureWeights.Wq;
-    const bq = lectureWeights.bq || new Array(dModelVal).fill(0);
-    const Wk = lectureWeights.Wk;
-    const bk = lectureWeights.bk || new Array(dModelVal).fill(0);
-    const Wv = lectureWeights.Wv;
-    const bv = lectureWeights.bv || new Array(dModelVal).fill(0);
-
-    if (!Wq || !Wk || !Wv) return null;
-
-    // 3. Compute projections
-    const Q = matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
-    const K = matmul(xPe, Wk).map((row) => row.map((v, c) => v + bk[c]));
-    const V = matmul(xPe, Wv).map((row) => row.map((v, c) => v + bv[c]));
-
-    // 4. Split
-    const Qh = splitHeads(Q, numHeadsVal);
-    const Kh = splitHeads(K, numHeadsVal);
-    const Vh = splitHeads(V, numHeadsVal);
-
-    // 5. Compute weights and outputs per head
-    const outWeights = [];
-    const outOutputs = [];
-    const outConcatenated = Array.from({ length: sentence.length }, () => new Array(dModelVal).fill(0));
-
-    for (let h = 0; h < numHeadsVal; h++) {
-      const qHead = Qh[h];
-      const kHead = Kh[h];
-      const vHead = Vh[h];
-
-      // Attention scores -> Softmax weights
-      const headScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(dKVal));
-      const softmaxRows = (mat) => mat.map((row) => {
-        const max = Math.max(...row);
-        const exps = row.map((v) => Math.exp(v - max));
-        const sum = exps.reduce((a, b) => a + b, 0);
-        return exps.map((v) => v / sum);
-      });
-      const headWeights = softmaxRows(headScores);
-      outWeights.push(headWeights);
-
-      // Weighted sum output per head
-      const headOutput = matmul(headWeights, vHead);
-      outOutputs.push(headOutput);
-
-      // Populate concatenated representation
-      for (let i = 0; i < sentence.length; i++) {
-        for (let d = 0; d < dKVal; d++) {
-          outConcatenated[i][h * dKVal + d] = headOutput[i][d];
-        }
-      }
-    }
-
-    return {
-      weights: outWeights,
-      valueHeads: Vh,
-      outputHeads: outOutputs,
-      concatenatedOutput: outConcatenated
-    };
-  }
+  $: interactiveData = computeAttentionPipeline(
+    activeSentence,
+    currentDModel,
+    configNumHeadsVal,
+    configDKVal,
+    lectureWeights
+  );
 
   // Bind active matrices/vectors based on dataMode
   $: activeAttentionWeights = $dataMode === 'lecture'
@@ -150,7 +85,7 @@
 
   $: activeValueVectors = $dataMode === 'lecture'
     ? (precomputedValueHeads[activeHeadIdx] ?? [])
-    : (interactiveData?.valueHeads?.[activeHeadIdx] ?? []);
+    : (interactiveData?.Vh_trans?.[activeHeadIdx] ?? []);
 
   $: activeOutputVectors = $dataMode === 'lecture'
     ? (precomputedOutputHeads[activeHeadIdx] ?? [])

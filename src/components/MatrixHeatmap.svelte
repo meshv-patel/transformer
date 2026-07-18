@@ -5,9 +5,7 @@
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
   import { dModel as configDModel, numHeads as configNumHeads, dK as configDK } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
-  import { generateEmbeddingVector } from '../core/embedding-utils.js';
-  import { sinusoidalPETable, addVectors } from '../core/positional-encoding.js';
-  import { matmul, splitHeads, scale, transpose } from '../core/tensor-ops.js';
+  import { computeAttentionPipeline } from '../core/tensor-ops.js';
   import { getSceneCopy } from '../data/scene-copy.js';
   import { focusShot } from '../core/camera/cameraStore.js';
   import { motionMs, prefersReducedMotion } from '../core/motion.js';
@@ -73,11 +71,22 @@
   // Resolve weights from store for interactive calculations
   $: lectureWeights = $forwardPassData?.weights ?? {};
 
+  $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
+  $: configDKVal = $dataMode === 'lecture' ? (currentDModel / configNumHeadsVal) : $configDK;
+
+  $: interactiveData = computeAttentionPipeline(
+    activeSentence,
+    currentDModel,
+    configNumHeadsVal,
+    configDKVal,
+    lectureWeights
+  );
+
   // Resolve the matrix data reactively
   $: resolvedMatrix = matrix.length ? matrix : (
     $dataMode === 'lecture'
       ? fetchLectureMatrix(sceneId, $subStepIndex, $forwardPassData)
-      : computeInteractiveMatrix(sceneId, $subStepIndex, activeSentence, currentDModel, $configNumHeads, $configDK)
+      : computeInteractiveMatrix(sceneId, $subStepIndex)
   );
 
   function fetchLectureMatrix(id, step, passData) {
@@ -88,11 +97,9 @@
     }
     if (id === 'scale-softmax') {
       if (step === 0) {
-        // Step 0: Division by sqrt(dk) -> retrieve precomputed scaled attention scores
         const stage = passData.stages?.find((s) => s.id === 'qk-matmul');
         return stage?.attentionScores ?? stage?.extra?.attentionScores ?? [];
       } else {
-        // Step 1: Softmax weights -> retrieve softmax attention weights
         const stage = passData.stages?.find((s) => s.id === 'scale-softmax');
         return stage?.attention ?? stage?.extra?.attention ?? [];
       }
@@ -104,50 +111,12 @@
     return [];
   }
 
-  function computeInteractiveMatrix(id, step, sentence, dModelVal, numHeadsVal, dKVal) {
-    if (!sentence || !sentence.length) return [];
-    
-    // 1. Get positional encoded vectors X_pe
-    const embeds = sentence.map((w) => generateEmbeddingVector(w, dModelVal));
-    const pes = sinusoidalPETable(sentence.length, dModelVal);
-    const xPe = embeds.map((e, i) => addVectors(e, pes[i]));
-
-    // 2. Extract weights
-    const Wq = lectureWeights.Wq;
-    const bq = lectureWeights.bq || new Array(dModelVal).fill(0);
-    const Wk = lectureWeights.Wk;
-    const bk = lectureWeights.bk || new Array(dModelVal).fill(0);
-
-    if (!Wq || !Wk) return [];
-
-    // 3. Compute projections
-    const Q = matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
-    const K = matmul(xPe, Wk).map((row) => row.map((v, c) => v + bk[c]));
-
-    // 4. Split and compute raw scores
-    const Qh = splitHeads(Q, numHeadsVal);
-    const Kh = splitHeads(K, numHeadsVal);
-
-    const outScores = [];
-    for (let h = 0; h < numHeadsVal; h++) {
-      const qHead = Qh[h];
-      const kHead = Kh[h];
-      const headScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(dKVal));
-      
-      if (id === 'qk-matmul' || (id === 'scale-softmax' && step === 0)) {
-        outScores.push(headScores);
-      } else {
-        // Apply row-wise softmax
-        const softmaxRows = (mat) => mat.map((row) => {
-          const max = Math.max(...row);
-          const exps = row.map((v) => Math.exp(v - max));
-          const sum = exps.reduce((a, b) => a + b, 0);
-          return exps.map((v) => v / sum);
-        });
-        outScores.push(softmaxRows(headScores));
-      }
+  function computeInteractiveMatrix(id, step) {
+    if (!interactiveData) return [];
+    if (id === 'qk-matmul' || (id === 'scale-softmax' && step === 0)) {
+      return interactiveData.scores;
     }
-    return outScores;
+    return interactiveData.weights;
   }
 
   // Configuration strings

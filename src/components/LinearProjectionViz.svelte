@@ -6,9 +6,7 @@
   import { forwardPassData } from '../core/data-loader.js';
   import { selectedTokenPos } from '../core/stores/tokenJourneyStore.js';
   import { highlightedTermId, setHighlight, clearHighlight } from '../core/stores/highlightStore.js';
-  import { generateEmbeddingVector } from '../core/embedding-utils.js';
-  import { sinusoidalPETable, addVectors } from '../core/positional-encoding.js';
-  import { matmul, splitHeads, scale, transpose } from '../core/tensor-ops.js';
+  import { computeAttentionPipeline, getInteractiveWeights, getInteractiveBias } from '../core/tensor-ops.js';
   import { VOCAB_WORDS } from '../data/vocab.js';
   import { getSceneCopy } from '../data/scene-copy.js';
   import { focusShot } from '../core/camera/cameraStore.js';
@@ -87,97 +85,34 @@
   $: seqLen = activeSentence.length;
 
   // Compute or select input vectors
+  $: interactiveData = computeAttentionPipeline(
+    activeSentence,
+    currentDModel,
+    4,
+    currentDModel / 4,
+    lectureWeights
+  );
+
   $: activeInputVectors = $dataMode === 'lecture'
     ? (lectureInputStage?.tokenVectors ?? [])
-    : computeInteractiveInput(interactiveSentence, currentDModel);
+    : (activeStageId === 'output-proj' ? (interactiveData?.concatenatedOutput ?? []) : (interactiveData?.xPe ?? []));
 
-  // Load weights
   $: activeWeightMatrix = $dataMode === 'lecture'
     ? (lectureWeights[activeWeightKey] ?? [])
-    : (lectureWeights[activeWeightKey] ?? buildInteractiveWeights(currentDModel));
+    : getInteractiveWeights(activeWeightKey, currentDModel, lectureWeights);
 
   $: activeBias = $dataMode === 'lecture'
     ? (lectureWeights[activeBiasKey] ?? [])
-    : (lectureWeights[activeBiasKey] ?? new Array(currentDModel).fill(0));
+    : getInteractiveBias(activeBiasKey, currentDModel, lectureWeights);
 
-  // Compute or select output vectors
   $: activeOutputVectors = $dataMode === 'lecture'
     ? (lectureOutputStage?.tokenVectors ?? [])
-    : computeProjection(activeInputVectors, activeWeightMatrix, activeBias);
-
-  function computeInteractiveInput(sentence, dModelVal) {
-    if (sceneId === 'output-proj') {
-      const numHeadsVal = 4;
-      const dKVal = dModelVal / numHeadsVal;
-      
-      const embeds = sentence.map((w) => generateEmbeddingVector(w, dModelVal));
-      const pes = sinusoidalPETable(sentence.length, dModelVal);
-      const xPe = embeds.map((e, i) => addVectors(e, pes[i]));
-
-      const Wq = lectureWeights.Wq;
-      const bq = lectureWeights.bq || new Array(dModelVal).fill(0);
-      const Wk = lectureWeights.Wk;
-      const bk = lectureWeights.bk || new Array(dModelVal).fill(0);
-      const Wv = lectureWeights.Wv;
-      const bv = lectureWeights.bv || new Array(dModelVal).fill(0);
-
-      if (!Wq || !Wk || !Wv) return Array.from({ length: sentence.length }, () => new Array(dModelVal).fill(0));
-
-      const Q = matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
-      const K = matmul(xPe, Wk).map((row) => row.map((v, c) => v + bk[c]));
-      const V = matmul(xPe, Wv).map((row) => row.map((v, c) => v + bv[c]));
-
-      const Qh = splitHeads(Q, numHeadsVal);
-      const Kh = splitHeads(K, numHeadsVal);
-      const Vh = splitHeads(V, numHeadsVal);
-
-      const outConcatenated = Array.from({ length: sentence.length }, () => new Array(dModelVal).fill(0));
-
-      for (let h = 0; h < numHeadsVal; h++) {
-        const qHead = Qh[h];
-        const kHead = Kh[h];
-        const vHead = Vh[h];
-
-        const headScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(dKVal));
-        const softmaxRows = (mat) => mat.map((row) => {
-          const max = Math.max(...row);
-          const exps = row.map((v) => Math.exp(v - max));
-          const sum = exps.reduce((a, b) => a + b, 0);
-          return exps.map((v) => v / sum);
-        });
-        const headWeights = softmaxRows(headScores);
-
-        const headOutput = matmul(headWeights, vHead);
-
-        for (let i = 0; i < sentence.length; i++) {
-          for (let d = 0; d < dKVal; d++) {
-            outConcatenated[i][h * dKVal + d] = headOutput[i][d];
-          }
-        }
-      }
-      return outConcatenated;
-    }
-    const embeds = sentence.map((w) => generateEmbeddingVector(w, dModelVal));
-    const pes = sinusoidalPETable(sentence.length, dModelVal);
-    return embeds.map((e, i) => addVectors(e, pes[i]));
-  }
-
-  function buildInteractiveWeights(dModelVal) {
-    const baseW = lectureWeights[activeWeightKey];
-    if (baseW && baseW[0] && baseW[0].length === dModelVal) {
-      return baseW.map(row => row.slice(0, dModelVal));
-    }
-    // Simple placeholder identity matrix of size dModelVal
-    return Array.from({ length: dModelVal }, (_, i) => 
-      Array.from({ length: dModelVal }, (_, j) => (i === j ? 1 : 0))
+    : (
+      activeStageId === 'proj-q' ? (interactiveData?.Q ?? []) :
+      activeStageId === 'proj-k' ? (interactiveData?.K ?? []) :
+      activeStageId === 'proj-v' ? (interactiveData?.V ?? []) :
+      activeStageId === 'output-proj' ? (interactiveData?.outputProj ?? []) : []
     );
-  }
-
-  function computeProjection(inputs, w, b) {
-    if (!inputs.length || !w.length) return [];
-    const proj = matmul(inputs, w);
-    return proj.map((row) => row.map((val, colIdx) => val + (b[colIdx] ?? 0)));
-  }
 
   // --- Dynamic Styling based on Projection Role ---
   $: accentColor = activeRole === 'q' 

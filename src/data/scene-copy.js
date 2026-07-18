@@ -1536,6 +1536,542 @@ export const SCENE_COPY = {
       ]
     }
   },
+  'residual-1': {
+    eyebrow: 'Attention · Residual stream',
+    title: 'Residual Connection ①',
+    fourQuestions: {
+      whatIsHappening: 'We add the skip connection input X_pe directly to the Attention block output A(X) cell-by-cell: Y = X_pe + A(X).',
+      why: 'This allows gradients to flow directly back during training, mitigating vanishing gradients, and preserves original positional/token details.',
+      whatChanged: 'The token representation matrix is updated by adding contextual adjustments from multi-head self-attention.',
+      whatToObserve: 'Audience can observe that cell values on the right represent the direct sum of the left two matrices.',
+    },
+    body: {
+      beginner: 'A residual connection acts like a highway. We take the original input vector and add the attention adjustments directly back onto it. This ensures that the model never loses the original token meanings while introducing new context.',
+      mtech: 'The skip connection establishes Y = X + Attention(X), allowing feature adjustments to act additively rather than multiplicatively. This preserves identity maps and ensures clean gradient backpropagation.',
+      research: 'Residual bypass is critical for training deep architectures. By summing the attention sub-layer output with its input, we create a path that avoids optimization bottlenecks, making training extremely stable.',
+    },
+    deepDive: {
+      math: 'Y = X + \\text{Attention}(X)',
+      complexity: 'O(seq\\_len \\times d\\_model) element-wise additions.',
+      matrixEquivalence: 'Additive skip connection, preserving the original model dimensions [seq_len, d_model] for downstream layers.',
+      misconceptions: [
+        'The skip connection does not concatenate representations. It adds them cell-by-cell. Concatenation would double the dimension size.',
+      ],
+      notes: 'No learnable parameters are involved in the skip addition itself.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we add instead of multiply?',
+          body: 'Multiplication causes gradients to shrink exponentially as depth increases. Addition acts as a direct highway, allowing gradients to flow back unaltered.',
+        },
+        {
+          title: 'What does the attention block represent?',
+          body: 'The attention block output represents an "update delta". Instead of rewriting the entire token representation, it calculates what adjustments should be added to the input representation.',
+        }
+      ],
+      example: {
+        left: [0.5, -0.2, 0.1, 0.4],
+        right: [0.1, 0.3, -0.2, 0.2],
+        caption: 'Input values (left) added to attention delta values (right) to form [0.6, 0.1, -0.1, 0.6].'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Input to Attention block', shape: null },
+      after: { label: 'Residual Stream Output', shape: null },
+      whatChanged: 'We added the attention output to the skip connection input.',
+      structured: {
+        entered: 'Input representation X_pe of shape [seq_len, d_model].',
+        happened: 'Attention output A(X) is added to X_pe cell-by-cell.',
+        changed: 'The representation is enriched with context while preserving identity.',
+        leaves: 'Residual output representation of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'Why are residual (skip) connections mathematically critical for training deep Transformer networks?',
+      choices: [
+        'They provide a linear pathway for gradients to backpropagate directly without vanishing.',
+        'They normalize the intermediate activations to zero mean and unit variance.',
+        'They allow the attention heads to compare tokens across different sequences.',
+        'They project the hidden representations back to the vocabulary size.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! By summing the output and input of the attention block, skip connections create a direct gradient path that bypasses the non-linear transformations, preventing vanishing gradients.',
+      transition: 'Now that the residual addition is complete, we normalize the features. Let\'s see that in the Layer Normalization scene.',
+      distractorNotes: {
+        1: 'Incorrect. Normalization is the task of LayerNorm, not the skip connection.',
+        2: 'Incorrect. Attention heads compare tokens; skip connections perform element-wise addition.',
+        3: 'Incorrect. Vocabulary projection is handled by the final lm_head layer.'
+      }
+    },
+    pytorch: [
+      { id: 'code-residual-1', code: 'x = x + attention_out' }
+    ],
+    equationTerms: [
+      { id: 'eq-residual-1', tex: 'Y = X + \\text{Attention}(X)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-residual', equationTermId: 'eq-residual-1', codeLineId: 'code-residual-1' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain the main attention output path.',
+        script: 'After the Output Projection, we obtain the attention update delta. We must add this delta back to our original input.',
+        audienceQuestion: 'Why do we call it a delta update?',
+        expectedAnswer: 'Because it represents the contextual adjustments that refine the original representations.',
+        misconception: 'Remind students that the attention output is not the final layer output; it is an additive refinement.',
+        transition: 'Let\'s view the skip connection highway.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Explain skip connection routing.',
+        script: 'Look at the skip connection highway at the top. We route the original input directly around the attention block, bypassing all transformations.',
+        audienceQuestion: 'Does the skip connection path have trainable parameters?',
+        expectedAnswer: 'No, it is a direct parameter-free addition.',
+        misconception: 'Ensure students understand that the skip connection behaves purely as an identity mapping.',
+        transition: 'Let\'s perform the addition.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain element-wise addition.',
+        script: 'We add the original input and the attention output delta cell-by-cell. This yields the new representation matrix, mixing original features and context.',
+        audienceQuestion: 'Can we perform this addition if the dimensions do not match?',
+        expectedAnswer: 'No, the shapes of both matrices must be identical.',
+        misconception: 'Point out that hover highlights align corresponding rows across all three matrices.',
+        transition: 'Let\'s review what changed.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review residual connection shapes and data flow.',
+        script: 'We have successfully merged our skip connection. Let\'s look at the summary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding of the residual connection.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess skip connection functionality.',
+        script: 'Take a look at the quick check question. Recall how skip connections solve vanishing gradients.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Let\'s move on to the Layer Normalization stage.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Use the highway metaphor to explain how features can pass through the network layers unchanged.'
+      ],
+      misconceptions: [
+        'Students often confuse addition with concatenation. Highlight the shape stays [seq, d_model] and does not double.'
+      ],
+      suggestedQuestions: [
+        'How would removing the skip connection affect the training speed of very deep networks?'
+      ]
+    }
+  },
+  'residual-2': {
+    eyebrow: 'Feed-forward · Residual stream',
+    title: 'Residual Connection ②',
+    fourQuestions: {
+      whatIsHappening: 'We add the LayerNorm output directly to the FFN output cell-by-cell: Y = LN_1(X) + FFN(LN_1(X)).',
+      why: 'This integrates feed-forward updates back into the residual stream while mitigating vanishing gradients.',
+      whatChanged: 'The token representation matrix is updated by adding feed-forward adjustments.',
+      whatToObserve: 'Audience can observe that cell values on the right represent the direct sum of the left two matrices.',
+    },
+    body: {
+      beginner: 'Just like the attention block, the feed-forward network produces an update delta. We take the input to the FFN and add the FFN\'s output directly back onto it, updating our token meanings.',
+      mtech: 'The second skip connection establishes Y = LN_1(X) + FFN(LN_1(X)), allowing feed-forward feature adjustments to act additively.',
+      research: 'SUM FFN updates back to the primary residual highway, enabling decoupled optimization paths across layer sub-components.',
+    },
+    deepDive: {
+      math: 'Y = X + \\text{FFN}(X)',
+      complexity: 'O(seq\\_len \\times d\\_model) element-wise additions.',
+      matrixEquivalence: 'Additive skip connection, preserving the original model dimensions [seq_len, d_model].',
+      misconceptions: [
+        'The skip connection does not use FFN weights; it acts after FFN processing is complete.',
+      ],
+      notes: 'No learnable parameters are involved in the skip addition itself.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need a second skip connection?',
+          body: 'Every sub-layer in a Transformer (Self-Attention and FFN) is wrapped in a residual connection. This ensures consistent gradient highways throughout the entire block.',
+        }
+      ],
+      example: {
+        left: [0.3, -0.1, 0.5, 0.2],
+        right: [-0.2, 0.4, 0.1, -0.3],
+        caption: 'FFN input values (left) added to FFN output values (right) to form [0.1, 0.3, 0.6, -0.1].'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Input to FFN block', shape: null },
+      after: { label: 'Layer Residual Output', shape: null },
+      whatChanged: 'We added the FFN output to the FFN input skip connection.',
+      structured: {
+        entered: 'Input representation of shape [seq_len, d_model].',
+        happened: 'FFN output is added to FFN input cell-by-cell.',
+        changed: 'The representation is enriched with non-linear feed-forward updates.',
+        leaves: 'Final block residual output representation of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'What is added to the FFN output in Residual Connection ②?',
+      choices: [
+        'The input to the FFN layer (LayerNorm ① output).',
+        'The original positional embeddings.',
+        'The attention weights matrix.',
+        'The output projection bias vector.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The input to the FFN layer (which has undergone LayerNorm ①) is routed through the skip connection and added directly to the FFN output.',
+      transition: 'Now that the second residual connection is complete, we perform final block normalization. Let\'s see Layer Normalization ②.',
+      distractorNotes: {
+        1: 'Incorrect. Positional embeddings are only added at the very start of the network.',
+        2: 'Incorrect. Attention weights are not in the residual stream path.',
+        3: 'Incorrect. The bias vector is already incorporated into the projection outputs.'
+      }
+    },
+    pytorch: [
+      { id: 'code-residual-2', code: 'x = x + ffn_out' }
+    ],
+    equationTerms: [
+      { id: 'eq-residual-2', tex: 'Y = X + \\text{FFN}(X)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-residual', equationTermId: 'eq-residual-2', codeLineId: 'code-residual-2' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain FFN output path.',
+        script: 'After the Feed Forward Network, we obtain the FFN update delta. We must add this delta back to the FFN input.',
+        audienceQuestion: 'What does the FFN layer refine compared to attention?',
+        expectedAnswer: 'Attention captures token-to-token relations; FFN refines individual token features.',
+        misconception: 'The FFN output is added back as a delta change.',
+        transition: 'Let\'s view the second skip connection highway.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Explain second skip connection routing.',
+        script: 'Just like before, the skip connection routes the FFN input around the FFN block, bypassing its projection layers.',
+        audienceQuestion: 'Are the first and second skip connection paths identical?',
+        expectedAnswer: 'They function identically, but carry different activation tensors.',
+        misconception: 'The skip connection contains no learnable parameters.',
+        transition: 'Let\'s perform the addition.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain FFN element-wise addition.',
+        script: 'We sum the FFN input and FFN output cell-by-cell. The resulting matrix represents the fully processed transformer block outputs.',
+        audienceQuestion: 'Does this addition alter the dimension shapes?',
+        expectedAnswer: 'No, shapes remain d_model.',
+        misconception: 'Point out the clean hover alignment across all three matrices.',
+        transition: 'Let\'s review what changed.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review second residual connection shapes and data flow.',
+        script: 'Let\'s look at the summary of the block update.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess second skip connection functionality.',
+        script: 'Take a look at the quick check question. Think about which activations are being added.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Let\'s proceed to the final Layer Normalization stage.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Emphasize that the Transformer block alternates Attention (relational mixing) and FFN (independent processing), each wrapped in skip connections.'
+      ],
+      misconceptions: [
+        'Ensure students see that each skip connection wraps exactly one processing sub-layer.'
+      ],
+      suggestedQuestions: [
+        'What would happen if we only had one skip connection around both layers together?'
+      ]
+    }
+  },
+  'layer-norm-1': {
+    eyebrow: 'Attention · Normalization',
+    title: 'Layer Normalization ①',
+    fourQuestions: {
+      whatIsHappening: 'We normalize the activations of each token row independently across the d_model dimensions, then apply scaling parameters (gamma) and shifting parameters (beta).',
+      why: 'Normalization keeps the scale of activations consistent across layers, preventing training instability and accelerating learning convergence.',
+      whatChanged: 'Each row is transformed to have mean 0.0 and variance 1.0 (pre-scaling), without changing the overall tensor shape.',
+      whatToObserve: 'Audience can observe how calculations occur independently for each token row (channel-wise), unlike Batch Normalization which operates column-wise.',
+    },
+    body: {
+      beginner: 'Layer Normalization makes sure the numbers in our vectors do not get too big or too small. We look at each token\'s vector, compute its average and variability, center its values around zero, and scale them to a standard size. Finally, we adjust them slightly using two learned tuning dials (gamma and beta).',
+      mtech: 'Layer Normalization centers and scales the features row-by-row: X_norm = (X - mean) / sqrt(var + eps). The normalized representations are then linearly scaled and shifted: Y = gamma * X_norm + beta. This stabilizes the hidden representations before they enter subsequent layers.',
+      research: 'Layer normalization operates channel-wise over each individual token: LN(x) = (x - E[x]) / sqrt(Var[x] + eps) * gamma + beta. This stabilizes training dynamics and provides invariance to shifts in input scaling, crucial for optimization in deep multi-head architectures.',
+    },
+    deepDive: {
+      math: 'Y = \\gamma \\odot \\hat{X} + \\beta',
+      complexity: 'O(seq\\_len \\times d\\_model) row-wise standard normalizations.',
+      matrixEquivalence: 'Row-wise standardization keeping shape [seq_len, d_model] identical. Parameters gamma [d_model] and beta [d_model] are learned during training.',
+      misconceptions: [
+        'Layer Normalization does not mix information between different tokens (rows). It normalizes each token\'s representation completely independently.',
+      ],
+      notes: 'Typically epsilon = 1e-5 to avoid division by zero.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why normalize row-by-row instead of column-by-column?',
+          body: 'Column-wise normalization (Batch Normalization) depends on other sentences in the training batch, which is problematic for variable sequence lengths in transformers. LayerNorm operates purely within one token row, making it completely independent of batch size or context size.',
+        },
+        {
+          title: 'What do gamma and beta do?',
+          body: 'If we only normalized, we would force every token to have a fixed distribution. Gamma (scale) and beta (shift) let the model learn to restore whatever distribution shape is best for representing features.',
+        }
+      ],
+      example: {
+        left: [1.2, 0.4, -0.8, 2.0],
+        right: [0.3, -0.6, -1.2, 1.5],
+        caption: 'Row values with mean = 0.7, std = 1.1 normalized to [0.45, -0.27, -1.36, 1.18].'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Residual Output ①', shape: null },
+      after: { label: 'LayerNorm Output ①', shape: null },
+      whatChanged: 'We standardized the residual representations row-by-row and applied scale/shift parameters.',
+      structured: {
+        entered: 'Residual Output matrix X of shape [seq_len, d_model].',
+        happened: 'Computed row-wise mean and variance, normalized values, and scaled/shifted with gamma and beta.',
+        changed: 'Activations are standardized to zero mean and unit variance per row, then scaled.',
+        leaves: 'Normalized representations Y of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'Unlike Batch Normalization, Layer Normalization computes mean and variance across which dimension?',
+      choices: [
+        'Across the channel/embedding dimension (row-wise for each token independently).',
+        'Across all batch samples and sequences simultaneously.',
+        'Across the sequence length dimension (column-wise for each feature).',
+        'Across multiple heads inside the attention block.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Layer Normalization normalizes the features of each token independently across the embedding (channel) dimension, making it robust against batch changes and sequence length variations.',
+      transition: 'Now that the first normalization step is complete, the features enter the Feed Forward Network. Let\'s proceed to the FFN scene.',
+      distractorNotes: {
+        1: 'Incorrect. Batch Normalization normalizes across batch samples and sequence indices.',
+        2: 'Incorrect. Normalizing column-wise across sequences is not LayerNorm.',
+        3: 'Incorrect. Normalization does not occur across heads; it occurs across the full model dimension.'
+      }
+    },
+    pytorch: [
+      { id: 'code-layernorm-1', code: 'x = torch.nn.functional.layer_norm(x, x.shape[-1:])' }
+    ],
+    equationTerms: [
+      { id: 'eq-layernorm-1', tex: 'Y = \\gamma \\odot \\left( \\frac{X - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} \\right) + \\beta' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-layernorm', equationTermId: 'eq-layernorm-1', codeLineId: 'code-layernorm-1' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain LayerNorm row-wise statistics.',
+        script: 'After adding features in the skip connection, we must normalize them. We start by calculating the mean mu and variance sigma squared for each token row independently.',
+        audienceQuestion: 'Does LayerNorm share statistics across different tokens?',
+        expectedAnswer: 'No, each token row is normalized completely independently of the other tokens.',
+        misconception: 'Make sure students notice that the statistics are computed across the columns for each row.',
+        transition: 'Let\'s normalize the activations.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain row-wise standardization.',
+        script: 'Next, we standardize each row value. We subtract the mean and divide by the standard deviation. This yields intermediate values with zero mean and unit variance.',
+        audienceQuestion: 'Why do we add a small epsilon term to the variance?',
+        expectedAnswer: 'To prevent division by zero in case the variance is exactly zero.',
+        misconception: 'Point out how the intermediate values are now nicely bounded.',
+        transition: 'Let\'s scale and shift using gamma and beta.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain scale and shift step.',
+        script: 'Finally, we apply scale factor gamma and shift factor beta. These learned parameters allow the layer to restore representation capacities.',
+        audienceQuestion: 'What are the default values of gamma and beta?',
+        expectedAnswer: 'Gamma is initialized to all ones, and beta is initialized to all zeros.',
+        misconception: 'Remind students that gamma and beta are optimized during training.',
+        transition: 'Let\'s review what changed in Layer Normalization.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review LayerNorm shapes and data flow.',
+        script: 'We have normalized our representations. Let\'s look at the summary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding of Layer Normalization.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess LayerNorm functionality.',
+        script: 'Take a look at the quick check question. Think about how LayerNorm differs from Batch Normalization.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Now we are ready to enter the Feed Forward Network.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Contrast LayerNorm and BatchNorm visually using a table. BatchNorm normalizes columns, LayerNorm normalizes rows.'
+      ],
+      misconceptions: [
+        'Clarify that LayerNorm does not change the sequence length or the d_model dimensions; it is a value-scaling operation.'
+      ],
+      suggestedQuestions: [
+        'How would Layer Normalization help prevent representation drift during training?'
+      ]
+    }
+  },
+  'layer-norm-2': {
+    eyebrow: 'Feed-forward · Normalization',
+    title: 'Layer Normalization ②',
+    fourQuestions: {
+      whatIsHappening: 'We normalize the activations of each token row independently across the d_model dimensions after the second skip connection, then scale with gamma and shift with beta.',
+      why: 'This normalizes features after Feed Forward processing, stabilizing representations before they propagate to the next encoder block or the output layer.',
+      whatChanged: 'Each row is standardized to zero mean and unit variance, preparing the representation for downstream stages.',
+      whatToObserve: 'Audience can observe how calculations occur independently for each token row.',
+    },
+    body: {
+      beginner: 'This is the final checkpoint of our transformer block. We take the output of our second skip connection and run it through Layer Normalization again to keep all numbers stable before sending them forward.',
+      mtech: 'The second LayerNorm centers and scales features row-by-row: Y = gamma2 * X_norm + beta2, stabilizing final block outputs.',
+      research: 'Normalizes block representations prior to block transitions, ensuring uniform activation boundaries across layers.',
+    },
+    deepDive: {
+      math: 'Y = \\gamma_2 \\odot \\hat{X} + \\beta_2',
+      complexity: 'O(seq\\_len \\times d\\_model) row-wise standard normalizations.',
+      matrixEquivalence: 'Row-wise standardization keeping shape [seq_len, d_model] identical.',
+      misconceptions: [
+        'This LayerNorm uses its own separate scale (gamma2) and shift (beta2) parameters, distinct from LayerNorm ①.',
+      ],
+      notes: 'No dimension transformations occur.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why normalize at the end of the block?',
+          body: 'Normalization stabilizes activations. In a deep network, stacking multiple layers causes representations to drift. Final normalization ensures consistent scaling at block boundaries.',
+        }
+      ],
+      example: {
+        left: [0.5, -0.4, 0.9, -1.0],
+        right: [0.1, -0.8, 1.2, -1.5],
+        caption: 'Values stabilized and scaled using LayerNorm ② weights.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Residual Output ②', shape: null },
+      after: { label: 'Block Normalized Output', shape: null },
+      whatChanged: 'We standardized the second residual block output row-by-row.',
+      structured: {
+        entered: 'Residual Output ② matrix X of shape [seq_len, d_model].',
+        happened: 'Normalized row-wise and scale-shifted with gamma2 and beta2.',
+        changed: 'Output values are standardized to standard scale boundaries.',
+        leaves: 'Final block output matrix Y of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'What is the purpose of the second Layer Normalization step at the block boundary?',
+      choices: [
+        'To stabilize features after FFN processing and ensure uniform scale before block output.',
+        'To compute new attention scores for the next sequence block.',
+        'To map token representations directly to vocabulary probability scores.',
+        'To insert positional details into the FFN outputs.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The second Layer Normalization step stabilizes and normalizes features after the FFN block skip connection, ensuring clean block boundaries.',
+      transition: 'Now that the encoder block is complete, let\'s review the final block representation.',
+      distractorNotes: {
+        1: 'Incorrect. Attention scores are calculated inside the self-attention sub-layers, not LayerNorm.',
+        2: 'Incorrect. Vocabulary projection is handled by the model classification head.',
+        3: 'Incorrect. Positional information is only injected at the network inputs.'
+      }
+    },
+    pytorch: [
+      { id: 'code-layernorm-2', code: 'x = torch.nn.functional.layer_norm(x, x.shape[-1:])' }
+    ],
+    equationTerms: [
+      { id: 'eq-layernorm-2', tex: 'Y = \\gamma_2 \\odot \\left( \\frac{X - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} \\right) + \\beta_2' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-layernorm', equationTermId: 'eq-layernorm-2', codeLineId: 'code-layernorm-2' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain LayerNorm ② statistics.',
+        script: 'After the second skip connection, we perform our final block normalization. We compute the row-wise mean and variance.',
+        audienceQuestion: 'What does this second normalization prepare features for?',
+        expectedAnswer: 'For entry into the next transformer block or classification layer.',
+        misconception: 'Each LayerNorm has its own independent weights.',
+        transition: 'Let\'s normalize the activations.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain row-wise standardization ②.',
+        script: 'We standardize each row value, centering features around zero mean and standard scale.',
+        audienceQuestion: 'Does sequence length affect these statistics?',
+        expectedAnswer: 'No, statistics are independent of sequence length.',
+        misconception: 'Standardization limits unbounded feature drift.',
+        transition: 'Let\'s scale and shift using gamma and beta.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain scale and shift step ②.',
+        script: 'We apply gamma two and beta two parameters, completing the encoder block calculations.',
+        audienceQuestion: 'Are these parameters learned during training?',
+        expectedAnswer: 'Yes, they are optimized to find the ideal feature distribution.',
+        misconception: 'The output maintains shape d_model.',
+        transition: 'Let\'s review what changed.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review second LayerNorm shapes and data flow.',
+        script: 'We have normalized our final block outputs. Let\'s look at the summary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess second LayerNorm functionality.',
+        script: 'Take a look at the quick check question. Think about the block boundary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. This completes the encoder block normalization.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Explain that the second LayerNorm acts as a boundary guard, keeping values clean before they enter next encoder blocks.'
+      ],
+      misconceptions: [
+        'Emphasize that gamma2 and beta2 are separate variables from gamma1 and beta1.'
+      ],
+      suggestedQuestions: [
+        'How does pre-layer normalization differ from post-layer normalization?'
+      ]
+    }
+  },
 };
 
 export function getSceneCopy(id) {
