@@ -1,0 +1,4 @@
+{
+  "note": "Phase 2 placeholder. Phase 3/4 Interactive Mode will expand this to the full curated ~150-300 word list described in the architecture addendum (§1), with its own small trained embedding table distinct from the Lecture Mode weights.",
+  "words": ["the", "a", "cat", "dog", "sat", "ran", "chased", "jumped", "down", "up", "quickly", "slowly"]
+}

@@ -1,0 +1,64 @@
+:root {
+  --bg-primary: #0b0e14;
+  --bg-elevated: #141722;
+  --text-primary: #e6e8ef;
+  --text-secondary: #9aa1b5;
+  --border-subtle: #232838;
+  --accent: #7aa2ff;      /* Q */
+  --accent-dim: #4a5578;
+  --accent-2: #ffb86b;    /* K */
+  --accent-3: #7ee787;    /* V */
+  --accent-4: #ff8a8a;    /* Output/warning */
+
+  font-family: 'Inter', system-ui, sans-serif;
+  color-scheme: dark;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', 'Inter', sans-serif;
+  font-weight: 600;
+  margin: 0;
+}
+
+code, pre {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+button {
+  font-family: inherit;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+}
+
+/*
+ * Global reduced-motion safety net. Svelte's own fly/fade/crossfade
+ * transitions are JS-driven and don't respond to this — those are handled
+ * per-call-site via core/motion.js's motionMs(). This catches everything
+ * else: hover/focus transitions, CSS @keyframes animations, and any future
+ * component that adds a plain CSS `transition:`/`animation:` without
+ * remembering to add its own reduced-motion media query.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
