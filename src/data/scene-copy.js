@@ -1940,6 +1940,142 @@ export const SCENE_COPY = {
       ]
     }
   },
+  'ffn': {
+    eyebrow: 'Feed-forward · Non-linear projection',
+    title: 'Feed Forward Network (FFN)',
+    fourQuestions: {
+      whatIsHappening: 'Each token representation independently passes through a two-layer multi-layer perceptron (MLP) with a non-linear activation (ReLU in this implementation).',
+      why: 'While attention handles communication between tokens, FFN handles token-specific feature transformation and introduces non-linearities essential for complex representation learning.',
+      whatChanged: 'Tokens are projected to a higher-dimensional space (d_ff = 32) where non-linear activation is applied, then projected back to model dimension (d_model = 16).',
+      whatToObserve: 'Audience can observe how negative values in the first linear layer output are completely suppressed to zero during the activation step.',
+    },
+    body: {
+      beginner: 'The Feed Forward Network is like an individual thinking cap for each token. Once attention is done letting tokens chat and share context, each token goes through this FFN alone to process its newly gained information. It expands the vector into a larger size, filters out negative values, and compresses it back to model size.',
+      mtech: 'The FFN is a position-wise network consisting of two linear transformations with a non-linear activation in between: FFN(x) = max(0, x W1 + b1) W2 + b2. It processes each position independently and identically, transforming channels locally.',
+      research: 'The FFN sub-layer consists of a position-wise feed-forward network applied to each token vector independently. This MLP expands the vector to a higher capacity intermediate dimension (d_ff) to disentangle features, applies a non-linear activation (typically ReLU or GELU), and projects it back to the residual stream space.',
+    },
+    deepDive: {
+      math: '\\text{FFN}(X) = \\text{ReLU}(X W_1 + b_1) W_2 + b_2',
+      complexity: 'O(seq\\_len \\times d\\_model \\times d\\_ff) parameter operations.',
+      matrixEquivalence: 'Two linear projections. First projects from 16 to 32 dimensions, second projects from 32 back to 16 dimensions.',
+      misconceptions: [
+        'There is absolutely no token-to-token communication in the FFN layer. The sequence length dimension remains completely isolated; only feature channels mix.',
+      ],
+      notes: 'd_model = 16, d_ff = 32. All weights (W1, W2) and biases (b1, b2) are learned parameters.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need non-linear activations?',
+          body: 'Without non-linear activations like ReLU, multiple linear layers would collapse mathematically into a single linear projection. Non-linearities allow the network to learn arbitrarily complex mapping functions.',
+        },
+        {
+          title: 'Why project to a higher dimension and back?',
+          body: 'Projecting to a higher capacity intermediate dimension (d_ff) allows features to be linearly separable, making it easier for the non-linear activation to filter out noise before the representation is compressed back.',
+        }
+      ],
+      example: {
+        left: [0.8, -0.4, 1.2, -0.9],
+        right: [0.8, 0.0, 1.2, 0.0],
+        caption: 'Negative values in the first linear output (left) are zeroed out by the ReLU activation (right).'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'LayerNorm Output ①', shape: null },
+      after: { label: 'FFN Block Output', shape: null },
+      whatChanged: 'We transformed features at each token position independently using a non-linear projection.',
+      structured: {
+        entered: 'LayerNorm Output matrix of shape [seq_len, d_model].',
+        happened: 'Each row multiplied by W1 + b1, activated via ReLU, and multiplied by W2 + b2.',
+        changed: 'Feature channels are mixed and filtered non-linearly per position.',
+        leaves: 'FFN output matrix of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'Which of the following statements is true regarding the Feed Forward Network (FFN) in a Transformer block?',
+      choices: [
+        'It processes each token position completely independently, mixing channel features without token-to-token communication.',
+        'It calculates dot-product attention scores between different tokens in the sequence.',
+        'It normalizes sequence channels to have zero mean and unit variance.',
+        'It injects relative positional information into the sequence representation.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The FFN is position-wise, meaning it processes each token independently and identically, mixing feature channels locally without any cross-token communication.',
+      transition: 'Now that the FFN is complete, we add its output back to the residual stream. Let\'s see that in the second Residual Connection.',
+      distractorNotes: {
+        1: 'Incorrect. Attention scores are calculated in the self-attention layer, not the FFN.',
+        2: 'Incorrect. Normalization is the job of the LayerNorm layers.',
+        3: 'Incorrect. Positional information is only injected at the inputs.'
+      }
+    },
+    pytorch: [
+      { id: 'code-ffn', code: 'x = torch.matmul(torch.relu(torch.matmul(x, W1) + b1), W2) + b2' }
+    ],
+    equationTerms: [
+      { id: 'eq-ffn', tex: 'Y = \\text{ReLU}(X W_1 + b_1) W_2 + b_2' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-ffn', equationTermId: 'eq-ffn', codeLineId: 'code-ffn' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain the first FFN linear layer.',
+        script: 'Following normalization, features enter the Feed Forward Network. Every token is processed completely independently. In the first linear layer, we project each token\'s vector to a higher-dimensional space of size thirty-two.',
+        audienceQuestion: 'Is there any communication between tokens in this layer?',
+        expectedAnswer: 'No, every token position is processed completely independently and in parallel.',
+        misconception: 'Remind students that only channels mix here, not tokens.',
+        transition: 'Let\'s activate these projections.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain non-linear activation.',
+        script: 'Next, we apply the non-linear activation function, ReLU. Watch how any negative values in our expanded vectors are completely suppressed to zero, while positive values pass through unchanged.',
+        audienceQuestion: 'Why is it important to filter out negative values?',
+        expectedAnswer: 'It introduces a non-linearity, allowing the model to learn complex, non-linear relationships.',
+        misconception: 'Make sure students notice the red highlighted zeros in the active column.',
+        transition: 'Let\'s project back to the model dimension.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain the second FFN linear layer.',
+        script: 'In the final step of the FFN, we project the activated representations back to the original model size of sixteen. This compresses the filtered information, ready to be added back to the main stream.',
+        audienceQuestion: 'Why must the output size match the hidden dimension?',
+        expectedAnswer: 'So that it can be added back to the residual stream via the skip connection.',
+        misconception: 'The FFN weights (W1 and W2) are separate learned parameters.',
+        transition: 'Let\'s review what changed in the FFN.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review FFN shapes and data flow.',
+        script: 'Our Feed Forward processing is complete. Let\'s look at the summary.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s check our understanding of the Feed Forward Network.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess FFN functionality.',
+        script: 'Take a look at the quick check question. Think about how the FFN behaves across different positions.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. Now we proceed to adding the FFN output back to the residual stream.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Emphasize the division of labor in a Transformer block: Attention mixes tokens, FFN refines features.'
+      ],
+      misconceptions: [
+        'Clarify that the FFN operates identically at every position, using the exact same weight matrices W1 and W2.'
+      ],
+      suggestedQuestions: [
+        'How would the network behavior change if we replaced the non-linear activation with a linear mapping?'
+      ]
+    }
+  },
   'layer-norm-2': {
     eyebrow: 'Feed-forward · Normalization',
     title: 'Layer Normalization ②',
@@ -2069,6 +2205,142 @@ export const SCENE_COPY = {
       ],
       suggestedQuestions: [
         'How does pre-layer normalization differ from post-layer normalization?'
+      ]
+    }
+  },
+  'encoder-output': {
+    eyebrow: 'Summary · Contextual Embeddings',
+    title: 'Encoder Output',
+    fourQuestions: {
+      whatIsHappening: 'We take the final contextualized token representations produced after LayerNorm-2 and present them as the final output of the Encoder block.',
+      why: 'This block transforms standard input embeddings into deep contextual representations that capture word meanings relative to the entire sentence structure.',
+      whatChanged: 'Input tokens entered as isolated representations; they leave as contextual vectors where each row integrates details from the entire sentence.',
+      whatToObserve: 'Audience can observe how changing the sentence or configuration alters all embedding values, reflecting the global context built by the Attention head.',
+    },
+    body: {
+      beginner: 'The Encoder Output is the final report card of the encoder block. Instead of just knowing what each word means in a dictionary, the encoder has looked at the whole sentence. Every word vector has now been adjusted to include the context of the words around it, making it ready to be used for translation or sorting tasks.',
+      mtech: 'The encoder output represents the final contextual embedding matrix of shape [seq_len, d_model] outputted by LayerNorm-2. These outputs are sent to the decoder stack or classification heads.',
+      research: 'The encoder output corresponds to the final representations of the encoder block. It captures deep contextual interactions via self-attention followed by position-wise feed-forward processing.',
+    },
+    deepDive: {
+      math: 'H_{\\text{out}} = \\text{LayerNorm}_2(\\text{FFN}(X_{LN1}) + X_{LN1})',
+      complexity: 'Identity transformation. Consumes the precomputed output of LayerNorm-2.',
+      matrixEquivalence: 'No mathematical transformations occur. Shape remains [seq_len, d_model].',
+      misconceptions: [
+        'The output is not a single vector, but a full matrix where each row represents a token in the sequence with its surrounding context.',
+      ],
+      notes: 'This output acts as key/value matrices for cross-attention in the decoder.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'What does "contextual representation" mean?',
+          body: 'In static embeddings, the word "bank" has the same vector whether it means a river bank or a money bank. After passing through the encoder block, self-attention alters the vector of "bank" based on other tokens in the sentence like "river" or "deposit".',
+        },
+        {
+          title: 'Where do these outputs go next?',
+          body: 'They can go to the next encoder block in a stack, to the cross-attention layer of a decoder block for translation, or to a classification head (like pooling the representations) to classify sentence sentiment.',
+        }
+      ],
+      example: {
+        left: [0.12, 0.85, -0.42, 1.15],
+        right: [0.95, -0.12, 0.44, 0.82],
+        caption: 'Encoder output representations for "chased" incorporating context from both "cat" and "dog".'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Input Embeddings', shape: null },
+      after: { label: 'Final Contextual Embeddings', shape: null },
+      whatChanged: 'Tokens now contain deep bidirectional context.',
+      structured: {
+        entered: 'Isolated word/positional embeddings X.',
+        happened: 'Self-Attention mixed token features, followed by non-linear Feed Forward transformation.',
+        changed: 'Activations represent the whole sentence context per token.',
+        leaves: 'Deep contextual representations Y of shape [seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'What characterizes the vectors in the final Encoder Output matrix compared to the input embeddings?',
+      choices: [
+        'Each token vector now includes contextual information gathered from the entire sentence.',
+        'They are larger in dimension than the input embeddings.',
+        'They are converted into probability values summing to 1.',
+        'They contain only positional information without semantic word data.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! The self-attention mechanism mixes token features across the sequence dimension, meaning each output vector represents a token in the context of the entire sentence.',
+      transition: 'This completes the Transformer Encoder block visualization! We are now ready to summarize the entire block flow.',
+      distractorNotes: {
+        1: 'Incorrect. The model dimension remains unchanged.',
+        2: 'Incorrect. These are hidden representations, not probabilities.',
+        3: 'Incorrect. Position and semantic data are both preserved and mixed.'
+      }
+    },
+    pytorch: [
+      { id: 'code-encoder-output', code: 'outputs = encoder(input_ids) # outputs.shape: [batch, seq_len, d_model]' }
+    ],
+    equationTerms: [
+      { id: 'eq-encoder-output', tex: 'X_{\\text{context}} = \\text{LayerNorm}_2(X_{\\text{residual2}})' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-encoder-output', equationTermId: 'eq-encoder-output', codeLineId: 'code-encoder-output' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Introduce final encoder representations.',
+        script: 'We have reached the end of the encoder block. The final matrix represents our tokens after processing through attention, FFN, and normalization.',
+        audienceQuestion: 'Is the sequence length or dimension modified here?',
+        expectedAnswer: 'No, the shape is preserved, but values now reflect contextual relationships.',
+        misconception: 'Make sure students see that every token has updated values.',
+        transition: 'Let\'s see how context is integrated.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain contextual embedding.',
+        script: 'Look at the highlighted row. Unlike the static input embeddings we started with, these vectors have gathered contextual clues from every other token in the sentence.',
+        audienceQuestion: 'Why is bidirectional context important?',
+        expectedAnswer: 'It helps the model resolve ambiguous words and understand syntax correctly.',
+        misconception: 'Point out how self-attention weights drove this blending.',
+        transition: 'Let\'s review where this representation is used.'
+      },
+      {
+        duration: '~35s',
+        objective: 'Explain applications.',
+        script: 'This contextual matrix can now be fed into stacked encoder blocks, passed to a decoder for machine translation, or sent to classification heads.',
+        audienceQuestion: 'Can we stack multiple encoder blocks?',
+        expectedAnswer: 'Yes, modern transformers stack many blocks to learn increasingly abstract representations.',
+        misconception: 'The format remains fully compatible across all blocks.',
+        transition: 'Let\'s review what changed in the complete encoder block.'
+      },
+      {
+        duration: '~20s',
+        objective: 'Review block shapes and data flow.',
+        script: 'The complete encoder block transformations are summarized here.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Let\'s verify our understanding.'
+      },
+      {
+        duration: '~30s',
+        objective: 'Assess encoder output functionality.',
+        script: 'Take a look at the quick check question. Think about how the representations changed.',
+        audienceQuestion: null,
+        expectedAnswer: null,
+        misconception: null,
+        transition: 'Excellent. This completes the Transformer Encoder block.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Use this scene to summarize the entire block, tracing the journey of a token from static embedding to contextual output.'
+      ],
+      misconceptions: [
+        'Ensure students understand that the encoder output is ready to be consumed directly by other layers.'
+      ],
+      suggestedQuestions: [
+        'How does this contextual representation benefit downstream classification tasks?'
       ]
     }
   },

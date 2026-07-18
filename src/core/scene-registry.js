@@ -22,10 +22,10 @@ export const SCENES = [
   { id: 'residual-1',       group: 'Attention', title: 'Residual Connection',       subSteps: ['main-path', 'skip-path', 'addition', 'before-after', 'quick-check'] },
   { id: 'layer-norm-1',     group: 'Attention', title: 'Layer Normalization',       subSteps: ['statistics', 'normalize', 'scale-shift', 'before-after', 'quick-check'] },
 
-  { id: 'ffn',              group: 'FeedFwd',   title: 'Feed Forward Network',      subSteps: ['expand', 'relu', 'project-back'] },
+  { id: 'ffn',              group: 'FeedFwd',   title: 'Feed Forward Network',      subSteps: ['linear-1', 'activation', 'linear-2', 'before-after', 'quick-check'] },
   { id: 'residual-2',       group: 'FeedFwd',   title: 'Residual Connection',       subSteps: ['main-path', 'skip-path', 'addition', 'before-after', 'quick-check'] },
   { id: 'layer-norm-2',     group: 'FeedFwd',   title: 'Layer Normalization',       subSteps: ['statistics', 'normalize', 'scale-shift', 'before-after', 'quick-check'] },
-  { id: 'encoder-output',   group: 'FeedFwd',   title: 'Encoder Output',            subSteps: ['final-representation'] },
+  { id: 'encoder-output',   group: 'FeedFwd',   title: 'Encoder Output',            subSteps: ['final-representation', 'context', 'applications', 'before-after', 'quick-check'] },
 ];
 
 export const SCENE_INDEX = Object.fromEntries(SCENES.map((s, i) => [s.id, i]));

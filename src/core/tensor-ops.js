@@ -52,14 +52,6 @@ export function softmaxRows(matrix) {
   return matrix.map(softmaxRow);
 }
 
-export function layerNorm(row, eps = 1e-5) {
-  if (!row || !row.length) return [];
-  const mean = row.reduce((a, b) => a + b, 0) / row.length;
-  const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / row.length;
-  const denom = Math.sqrt(variance + eps);
-  return row.map((v) => (v - mean) / denom);
-}
-
 export function relu(a) {
   if (!a || !a.length) return [];
   return a.map((row) => row.map((v) => Math.max(0, v)));
@@ -176,7 +168,20 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
       weights: [],
       outputHeads: [],
       concatenatedOutput: [],
-      outputProj: []
+      outputProj: [],
+      residual1: [],
+      ln1_means: [],
+      ln1_vars: [],
+      ln1_norms: [],
+      ln1_outputs: [],
+      ffn_linear1: [],
+      ffn_activation: [],
+      ffn_outputs: [],
+      residual2: [],
+      ln2_means: [],
+      ln2_vars: [],
+      ln2_norms: [],
+      ln2_outputs: []
     };
   }
 
@@ -195,6 +200,8 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
   const Wo = getInteractiveWeights('Wo', dModelVal, lectureWeights);
   const bo = getInteractiveBias('bo', dModelVal, lectureWeights);
 
+  const safeDKVal = Math.max(1, Math.floor(dModelVal / (numHeadsVal || 1)));
+
   // 3. Projections
   const Q = matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
   const K = matmul(xPe, Wk).map((row) => row.map((v, c) => v + bk[c]));
@@ -202,13 +209,13 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
 
   // 4. Split Heads (before transpose)
   const Qh = Array.from({ length: sentence.length }, (_, i) =>
-    Array.from({ length: numHeadsVal }, (_, h) => Q[i].slice(h * dKVal, (h + 1) * dKVal))
+    Array.from({ length: numHeadsVal }, (_, h) => Q[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
   );
   const Kh = Array.from({ length: sentence.length }, (_, i) =>
-    Array.from({ length: numHeadsVal }, (_, h) => K[i].slice(h * dKVal, (h + 1) * dKVal))
+    Array.from({ length: numHeadsVal }, (_, h) => K[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
   );
   const Vh = Array.from({ length: sentence.length }, (_, i) =>
-    Array.from({ length: numHeadsVal }, (_, h) => V[i].slice(h * dKVal, (h + 1) * dKVal))
+    Array.from({ length: numHeadsVal }, (_, h) => V[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
   );
 
   // 5. Transpose Heads (head-first)
@@ -228,7 +235,7 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
     const vHead = Vh_trans[h];
 
     // Scores
-    const headScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(dKVal));
+    const headScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(safeDKVal));
     outScores.push(headScores);
 
     // Weights
@@ -241,8 +248,11 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
 
     // Concat
     for (let i = 0; i < sentence.length; i++) {
-      for (let d = 0; d < dKVal; d++) {
-        outConcatenated[i][h * dKVal + d] = headOutput[i][d];
+      for (let d = 0; d < safeDKVal; d++) {
+        const destIdx = h * safeDKVal + d;
+        if (destIdx < dModelVal && headOutput[i] && d < headOutput[i].length) {
+          outConcatenated[i][destIdx] = headOutput[i][d];
+        }
       }
     }
   }
@@ -284,6 +294,50 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
     ln1_outputs.push(outRow);
   }
 
+  // 10. Feed Forward Network (FFN)
+  const dFFVal = dModelVal * 2;
+  const W_ff1 = getInteractiveWeights2D('W_ff1', dModelVal, dFFVal, lectureWeights);
+  const b_ff1 = getInteractiveBias1D('b_ff1', dFFVal, lectureWeights);
+  const W_ff2 = getInteractiveWeights2D('W_ff2', dFFVal, dModelVal, lectureWeights);
+  const b_ff2 = getInteractiveBias1D('b_ff2', dModelVal, lectureWeights);
+
+  const ffn_linear1 = matmul(ln1_outputs, W_ff1).map((row) => row.map((v, c) => v + b_ff1[c]));
+  const ffn_activation = relu(ffn_linear1);
+  const ffn_outputs = matmul(ffn_activation, W_ff2).map((row) => row.map((v, c) => v + b_ff2[c]));
+
+  // 11. Residual 2 Skip Connection
+  const residual2 = addMatrices(ln1_outputs, ffn_outputs);
+
+  // 12. Layer Normalization 2
+  const ln2_means = [];
+  const ln2_vars = [];
+  const ln2_norms = [];
+  const ln2_outputs = [];
+
+  const ln2_gamma = getInteractiveBias('ln2_gamma', dModelVal, lectureWeights).map(() => 1.0); // defaults to 1.0
+  const ln2_beta = getInteractiveBias('ln2_beta', dModelVal, lectureWeights); // defaults to 0.0
+
+  for (let i = 0; i < sentence.length; i++) {
+    const row = residual2[i];
+    if (!row || !row.length) {
+      ln2_means.push(0);
+      ln2_vars.push(0);
+      ln2_norms.push([]);
+      ln2_outputs.push([]);
+      continue;
+    }
+    const mean = row.reduce((a, b) => a + b, 0) / row.length;
+    const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / row.length;
+    const denom = Math.sqrt(variance + eps);
+    const norm = row.map((v) => (v - mean) / denom);
+    const outRow = norm.map((v, c) => v * (ln2_gamma[c] ?? 1) + (ln2_beta[c] ?? 0));
+
+    ln2_means.push(mean);
+    ln2_vars.push(variance);
+    ln2_norms.push(norm);
+    ln2_outputs.push(outRow);
+  }
+
   return {
     embeds,
     pes,
@@ -300,6 +354,55 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
     ln1_means,
     ln1_vars,
     ln1_norms,
-    ln1_outputs
+    ln1_outputs,
+    ffn_linear1,
+    ffn_activation,
+    ffn_outputs,
+    residual2,
+    ln2_means,
+    ln2_vars,
+    ln2_norms,
+    ln2_outputs
   };
+}
+
+export function getInteractiveWeights2D(weightKey, inDim, outDim, lectureWeights) {
+  const baseW = lectureWeights?.[weightKey];
+  if (!baseW || !baseW.length || !baseW[0].length) {
+    return Array.from({ length: inDim }, (_, i) =>
+      Array.from({ length: outDim }, (_, j) => (i === j ? 1.0 : 0.0))
+    );
+  }
+  const baseIn = baseW.length;
+  const baseOut = baseW[0].length;
+  if (baseIn === inDim && baseOut === outDim) return baseW;
+
+  const newW = Array.from({ length: inDim }, () => new Array(outDim).fill(0));
+  for (let i = 0; i < inDim; i++) {
+    for (let j = 0; j < outDim; j++) {
+      if (i < baseIn && j < baseOut) {
+        newW[i][j] = baseW[i][j];
+      } else {
+        newW[i][j] = (i === j) ? 1.0 : 0.0;
+      }
+    }
+  }
+  return newW;
+}
+
+export function getInteractiveBias1D(biasKey, outDim, lectureWeights) {
+  const baseB = lectureWeights?.[biasKey];
+  if (!baseB || !baseB.length) return new Array(outDim).fill(0);
+  const baseSize = baseB.length;
+  if (baseSize === outDim) return baseB;
+
+  const newB = new Array(outDim).fill(0);
+  for (let i = 0; i < outDim; i++) {
+    if (i < baseSize) {
+      newB[i] = baseB[i];
+    } else {
+      newB[i] = 0;
+    }
+  }
+  return newB;
 }

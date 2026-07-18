@@ -6,6 +6,8 @@ import WeightedSumViz from '../../components/WeightedSumViz.svelte';
 import HeadsSplitViz from '../../components/HeadsSplitViz.svelte';
 import ResidualConnectionViz from '../../components/ResidualConnectionViz.svelte';
 import LayerNormViz from '../../components/LayerNormViz.svelte';
+import FeedForwardViz from '../../components/FeedForwardViz.svelte';
+import EncoderOutputViz from '../../components/EncoderOutputViz.svelte';
 
 export const SCENE_VIZ = {
   embedding: EmbeddingViz,
@@ -24,6 +26,8 @@ export const SCENE_VIZ = {
   'residual-2': ResidualConnectionViz,
   'layer-norm-1': LayerNormViz,
   'layer-norm-2': LayerNormViz,
+  'ffn': FeedForwardViz,
+  'encoder-output': EncoderOutputViz,
   // Phase 4 adds the rest here, one at a time, each following
   // EmbeddingViz.svelte's pattern.
 };
