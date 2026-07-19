@@ -25,25 +25,44 @@
   $: activeMode = mode || (sceneId === 'concat' ? 'concat' : 'split');
   $: isConcatScene = activeMode === 'concat';
 
-  // Interactive sentence builder state
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
+
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
-  }
-  function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
-  }
-  function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (isDecoderStream) {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
 
-  $: activeSentence = $dataMode === 'lecture' 
-    ? ($forwardPassData?.meta?.sentence ?? []) 
-    : interactiveSentence;
+  function removeWord(index) {
+    if (isDecoderStream) {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
+  }
+
+  function resetSentence() {
+    if (isDecoderStream) {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
+  }
+
+  // --- Data selection: Lecture vs Interactive ---
+  $: lectureMeta = $forwardPassData?.meta ?? null;
+  $: activeSentence = $dataMode === 'lecture'
+    ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
+    : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
 
   $: resolvedLabels = activeSentence;
   $: seqLen = resolvedLabels.length;
@@ -59,19 +78,21 @@
   $: precomputedQ = projQStage?.tokenVectors ?? [];
 
   // Live calculations for Interactive Mode
-  $: interactiveData = computeAttentionPipeline(
-    activeSentence,
-    currentDModel,
-    numHeadsVal,
-    dKVal,
+  $: interactiveData = computeAttentionPipeline({
+    encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
+    decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
+    dModel: currentDModel,
+    numHeads: numHeadsVal,
     lectureWeights
-  );
+  });
+
+  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
 
   // Resolve input matrix: Q for split-heads, Concatenated Weighted Sum for concat
   $: precomputedWS = $forwardPassData?.stages?.find((s) => s.id === 'weighted-sum')?.tokenVectors ?? [];
   $: inputMatrix = isConcatScene
-    ? ($dataMode === 'lecture' ? precomputedWS : (interactiveData?.concatenatedOutput ?? []))
-    : ($dataMode === 'lecture' ? precomputedQ : (interactiveData?.Q ?? []));
+    ? ($dataMode === 'lecture' && !isDecoderStream ? precomputedWS : (activePipeline?.concatenatedOutput ?? []))
+    : ($dataMode === 'lecture' && !isDecoderStream ? precomputedQ : (activePipeline?.Q ?? []));
 
   // Reactively compute the reshaped matrix [seq_len, num_heads, d_k]
   $: reshapedMatrix = Array.from({ length: seqLen }, (_, i) => {

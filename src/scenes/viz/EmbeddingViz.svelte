@@ -2,7 +2,7 @@
   import { fly, fade } from 'svelte/transition';
   import { crossfade } from 'svelte/transition';
   import { cubicOut, quintOut } from 'svelte/easing';
-  import { subStepIndex, replayTick, dataMode } from '../../core/stores/sceneStore.js';
+  import { subStepIndex, replayTick, dataMode, currentScene } from '../../core/stores/sceneStore.js';
   import { dModel as configDModel } from '../../core/stores/configStore.js';
   import { forwardPassData } from '../../core/data-loader.js';
   import { selectedTokenPos } from '../../core/stores/tokenJourneyStore.js';
@@ -19,29 +19,44 @@
   import QuickCheck from '../../components/QuickCheck.svelte';
   import VectorHeatmap from '../../components/VectorHeatmap.svelte';
 
-  const copy = SCENE_COPY.embedding;
+  $: sceneId = $currentScene?.id;
+  $: copy = SCENE_COPY[sceneId] || SCENE_COPY.embedding;
+  $: sentenceType = $currentScene?.config?.sentenceType ?? 'encoder';
 
-  // Named sub-step constants — replaces magic-number comparisons
-  // ($subStepIndex === 2, etc.) with readable names. See
-  // docs/reference-implementation.md "External review response" §1.
+  // Named sub-step constants
   const STEP = { LOOKUP: 0, MATERIALIZE: 1, SUMMARY: 2, QUIZ: 3 };
 
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
 
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
   let compareMode = false;
   let compareSelection = []; // up to 2 token indices
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
+    if (sentenceType === 'decoder') {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
   function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    if (sentenceType === 'decoder') {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
   }
   function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (sentenceType === 'decoder') {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
   }
 
   // --- Data selection: Lecture (real precomputed) vs Interactive (live, seeded) ---
@@ -49,14 +64,19 @@
   $: lectureEmbeddingStage = $forwardPassData?.stages?.find((s) => s.id === 'embedding') ?? null;
   $: lectureEmbeddingSample = $forwardPassData?.embeddingSample ?? [];
 
-  $: activeSentence = $dataMode === 'lecture' ? (lectureMeta?.sentence ?? []) : interactiveSentence;
-  $: currentDModel = $dataMode === 'lecture' ? (lectureMeta?.dModel ?? 16) : $configDModel;
-  $: activeTokenIds = $dataMode === 'lecture' ? (lectureMeta?.tokenIds ?? []) : interactiveSentence.map(pseudoTokenId);
-  $: activeVectors = $dataMode === 'lecture'
-    ? (lectureEmbeddingStage?.tokenVectors ?? [])
-    : interactiveSentence.map((w) => generateEmbeddingVector(w, $configDModel));
+  $: activeSentence = $dataMode === 'lecture'
+    ? (sentenceType === 'decoder' ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
+    : (sentenceType === 'decoder' ? interactiveTargetSentence : interactiveSentence);
 
-  $: tableRows = $dataMode === 'lecture' ? lectureEmbeddingSample : buildInteractiveTable(interactiveSentence, $configDModel);
+  $: currentDModel = $dataMode === 'lecture' ? (lectureMeta?.dModel ?? 16) : $configDModel;
+  $: activeTokenIds = activeSentence.map(pseudoTokenId);
+  $: activeVectors = $dataMode === 'lecture' && sentenceType !== 'decoder'
+    ? (lectureEmbeddingStage?.tokenVectors ?? [])
+    : activeSentence.map((w) => generateEmbeddingVector(w, currentDModel));
+
+  $: tableRows = $dataMode === 'lecture' && sentenceType !== 'decoder'
+    ? lectureEmbeddingSample
+    : buildInteractiveTable(activeSentence, currentDModel);
   $: usedRows = tableRows.filter((r) => r.used);
 
   function buildInteractiveTable(sentenceWords, dModelVal) {

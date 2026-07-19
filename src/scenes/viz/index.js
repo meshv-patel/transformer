@@ -28,8 +28,21 @@ export const SCENE_VIZ = {
   'layer-norm-2': LayerNormViz,
   'ffn': FeedForwardViz,
   'encoder-output': EncoderOutputViz,
-  // Phase 4 adds the rest here, one at a time, each following
-  // EmbeddingViz.svelte's pattern.
+  'dec-embedding': EmbeddingViz,
+  'dec-positional-enc': PositionalEncodingViz,
+  'dec-proj-q': LinearProjectionViz,
+  'dec-proj-k': LinearProjectionViz,
+  'dec-proj-v': LinearProjectionViz,
+  'dec-split-heads': HeadsSplitViz,
+  'dec-qk-matmul': MatrixHeatmap,
+  'dec-causal-mask': MatrixHeatmap,
+  'dec-scale-softmax': MatrixHeatmap,
+  'dec-weighted-sum': WeightedSumViz,
+  'dec-heads-compare': MatrixHeatmap,
+  'dec-concat': HeadsSplitViz,
+  'dec-output-proj': LinearProjectionViz,
+  'dec-residual-1': ResidualConnectionViz,
+  'dec-layer-norm-1': LayerNormViz,
 };
 
 export const IMPLEMENTED_SCENE_IDS = new Set(Object.keys(SCENE_VIZ));

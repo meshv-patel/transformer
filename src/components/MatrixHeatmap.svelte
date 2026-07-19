@@ -44,25 +44,45 @@
     ? stepMap.ATTENTION_GRID.includes($subStepIndex)
     : $subStepIndex === stepMap.ATTENTION_GRID;
 
-  // Interactive sentence management
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: isDecoderStream = stream === 'decoder';
+  $: matrixType = $currentScene?.config?.matrixType ?? null;
+  $: showCausalMask = $currentScene?.config?.showCausalMask ?? (sceneId === 'dec-causal-mask' || sceneId === 'dec-scale-softmax' || sceneId === 'dec-heads-compare');
+
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
+
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
+    if (isDecoderStream) {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
   function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    if (isDecoderStream) {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
   }
   function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (isDecoderStream) {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
   }
 
-  $: activeSentence = $dataMode === 'lecture' 
-    ? ($forwardPassData?.meta?.sentence ?? []) 
-    : (labels.length ? labels : interactiveSentence);
+  $: activeSentence = $dataMode === 'lecture'
+    ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
+    : (labels.length ? labels : (isDecoderStream ? interactiveTargetSentence : interactiveSentence));
 
   $: resolvedLabels = labels.length ? labels : activeSentence;
   $: seqLen = resolvedLabels.length;
@@ -74,17 +94,19 @@
   $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
   $: configDKVal = $dataMode === 'lecture' ? (currentDModel / configNumHeadsVal) : $configDK;
 
-  $: interactiveData = computeAttentionPipeline(
-    activeSentence,
-    currentDModel,
-    configNumHeadsVal,
-    configDKVal,
+  $: interactiveData = computeAttentionPipeline({
+    encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
+    decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
+    dModel: currentDModel,
+    numHeads: configNumHeadsVal,
     lectureWeights
-  );
+  });
+
+  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
 
   // Resolve the matrix data reactively
   $: resolvedMatrix = matrix.length ? matrix : (
-    $dataMode === 'lecture'
+    $dataMode === 'lecture' && !isDecoderStream
       ? fetchLectureMatrix(sceneId, $subStepIndex, $forwardPassData)
       : computeInteractiveMatrix(sceneId, $subStepIndex)
   );
@@ -112,11 +134,34 @@
   }
 
   function computeInteractiveMatrix(id, step) {
-    if (!interactiveData) return [];
-    if (id === 'qk-matmul' || (id === 'scale-softmax' && step === 0)) {
-      return interactiveData.scores;
+    if (!activePipeline) return [];
+    if (isDecoderStream) {
+      if (matrixType === 'scores' || id === 'dec-qk-matmul') {
+        return activePipeline.rawScores;
+      }
+      if (matrixType === 'masked-scores' || id === 'dec-causal-mask') {
+        return activePipeline.maskedScores;
+      }
+      return activePipeline.weights;
     }
-    return interactiveData.weights;
+    if (id === 'qk-matmul' || (id === 'scale-softmax' && step === 0)) {
+      return activePipeline.scores;
+    }
+    return activePipeline.weights;
+  }
+
+  function formatCellColor(val, isMasked) {
+    if (isMasked || val === -Infinity || !isFinite(val)) {
+      return 'rgba(15, 18, 28, 0.7)';
+    }
+    return cellColor(val);
+  }
+
+  function formatCellText(val, isMasked) {
+    if (isMasked || val === -Infinity || val < -1e8) {
+      return '-∞';
+    }
+    return val.toFixed(2);
   }
 
   // Configuration strings
@@ -315,11 +360,12 @@
                             <!-- svelte-ignore a11y-interactive-supports-focus -->
                             <div
                               class="cell"
-                              style="background: {cellColor(val)};"
+                              class:is-masked={c > r && showCausalMask}
+                              style="background: {formatCellColor(val, c > r && showCausalMask)};"
                               role="button"
                               tabindex="0"
-                              aria-label={`Head ${h}, row ${resolvedLabels[r]} Query, col ${resolvedLabels[c]} Key: value ${val.toFixed(4)}`}
-                              title={`${resolvedLabels[r]} ↔ ${resolvedLabels[c]}: ${val.toFixed(4)}`}
+                              aria-label={`Head ${h}, row ${resolvedLabels[r]} Query, col ${resolvedLabels[c]} Key: value ${formatCellText(val, c > r && showCausalMask)}`}
+                              title={`${resolvedLabels[r]} ↔ ${resolvedLabels[c]}: ${formatCellText(val, c > r && showCausalMask)}`}
                               in:fade={{ duration: 120, delay: prefersReducedMotion ? 0 : (r * seqLen + c) * 35 }}
                             ></div>
                           {/each}
@@ -350,10 +396,11 @@
                           class:hovered={hoveredRow === r && hoveredCol === c}
                           class:highlight-row={hoveredRow === r}
                           class:highlight-col={hoveredCol === c}
-                          style="background: {cellColor(val)};"
+                          class:is-masked={c > r && showCausalMask}
+                          style="background: {formatCellColor(val, c > r && showCausalMask)};"
                           role="button"
                           tabindex="0"
-                          aria-label={`row ${resolvedLabels[r]} Query, col ${resolvedLabels[c]} Key: value ${val.toFixed(4)}`}
+                          aria-label={`row ${resolvedLabels[r]} Query, col ${resolvedLabels[c]} Key: value ${formatCellText(val, c > r && showCausalMask)}`}
                           on:mouseenter={() => handleCellEnter(r, c, val)}
                           on:mouseleave={handleCellLeave}
                           on:focus={() => handleCellEnter(r, c, val)}
@@ -362,7 +409,7 @@
                           in:fade={{ duration: 120, delay: prefersReducedMotion ? 0 : (r * seqLen + c) * 35 }}
                         >
                           <span class="cell-val" class:visible={hoveredRow === r && hoveredCol === c}>
-                            {val.toFixed(2)}
+                            {formatCellText(val, c > r && showCausalMask)}
                           </span>
                         </div>
                       {/each}
@@ -649,6 +696,10 @@
   }
   .cell.highlight-col {
     box-shadow: inset 0 0 0 2px var(--accent-2, #ffb86b);
+  }
+  .cell.is-masked {
+    background-image: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.06) 0, rgba(255, 255, 255, 0.06) 2px, transparent 2px, transparent 6px);
+    opacity: 0.55;
   }
 
   .cell-val {

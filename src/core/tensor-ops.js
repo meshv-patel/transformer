@@ -107,7 +107,8 @@ export function attention(q, k, v, dK) {
  * Safe weight retrieval supporting dynamic scaling/resizing in Interactive Mode.
  */
 export function getInteractiveWeights(weightKey, dModelVal, lectureWeights) {
-  const baseW = lectureWeights?.[weightKey];
+  const fallbackKey = weightKey.endsWith('_dec') ? weightKey.replace('_dec', '') : weightKey;
+  const baseW = lectureWeights?.[weightKey] ?? lectureWeights?.[fallbackKey];
   if (!baseW || !baseW.length || !baseW[0].length) {
     // Return compatible identity fallback
     return Array.from({ length: dModelVal }, (_, i) =>
@@ -134,7 +135,8 @@ export function getInteractiveWeights(weightKey, dModelVal, lectureWeights) {
  * Safe bias retrieval supporting dynamic scaling/resizing in Interactive Mode.
  */
 export function getInteractiveBias(biasKey, dModelVal, lectureWeights) {
-  const baseB = lectureWeights?.[biasKey];
+  const fallbackKey = biasKey.endsWith('_dec') ? biasKey.replace('_dec', '') : biasKey;
+  const baseB = lectureWeights?.[biasKey] ?? lectureWeights?.[fallbackKey];
   if (!baseB || !baseB.length) {
     return new Array(dModelVal).fill(0);
   }
@@ -155,7 +157,153 @@ export function getInteractiveBias(biasKey, dModelVal, lectureWeights) {
 /**
  * Shared central function computing the entire multi-head attention execution path in Interactive Mode.
  */
-export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal, lectureWeights) {
+export function computeAttentionPipeline({
+  encoderSentence = [],
+  decoderSentence = [],
+  dModel = 16,
+  numHeads = 4,
+  lectureWeights = {}
+} = {}) {
+  const sentence = encoderSentence;
+  const dModelVal = dModel;
+  const numHeadsVal = numHeads;
+  const safeDKVal = Math.max(1, Math.floor(dModelVal / (numHeadsVal || 1)));
+  const eps = 1e-5;
+
+  // Decoder Stage 1: Embeddings and Positional Encoding
+  const dec_embeds = decoderSentence.map((w) => generateEmbeddingVector(w, dModelVal));
+  const dec_pes = sinusoidalPETable(decoderSentence.length, dModelVal);
+  const dec_xPe = dec_embeds.map((e, i) => addVectors(e, dec_pes[i]));
+
+  // Decoder Stage 2: Masked Self-Attention
+  const Wq_dec = getInteractiveWeights('Wq_dec', dModelVal, lectureWeights);
+  const bq_dec = getInteractiveBias('bq_dec', dModelVal, lectureWeights);
+  const Wk_dec = getInteractiveWeights('Wk_dec', dModelVal, lectureWeights);
+  const bk_dec = getInteractiveBias('bk_dec', dModelVal, lectureWeights);
+  const Wv_dec = getInteractiveWeights('Wv_dec', dModelVal, lectureWeights);
+  const bv_dec = getInteractiveBias('bv_dec', dModelVal, lectureWeights);
+  const Wo_dec = getInteractiveWeights('Wo_dec', dModelVal, lectureWeights);
+  const bo_dec = getInteractiveBias('bo_dec', dModelVal, lectureWeights);
+
+  const dec_Q = matmul(dec_xPe, Wq_dec).map((row) => row.map((v, c) => v + bq_dec[c]));
+  const dec_K = matmul(dec_xPe, Wk_dec).map((row) => row.map((v, c) => v + bk_dec[c]));
+  const dec_V = matmul(dec_xPe, Wv_dec).map((row) => row.map((v, c) => v + bv_dec[c]));
+
+  const dec_Qh = Array.from({ length: decoderSentence.length }, (_, i) =>
+    Array.from({ length: numHeadsVal }, (_, h) => dec_Q[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
+  );
+  const dec_Kh = Array.from({ length: decoderSentence.length }, (_, i) =>
+    Array.from({ length: numHeadsVal }, (_, h) => dec_K[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
+  );
+  const dec_Vh = Array.from({ length: decoderSentence.length }, (_, i) =>
+    Array.from({ length: numHeadsVal }, (_, h) => dec_V[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
+  );
+
+  const dec_Qh_trans = splitHeads(dec_Q, numHeadsVal);
+  const dec_Kh_trans = splitHeads(dec_K, numHeadsVal);
+  const dec_Vh_trans = splitHeads(dec_V, numHeadsVal);
+
+  const dec_rawScores = [];
+  const dec_maskedScores = [];
+  const dec_weights = [];
+  const dec_outputHeads = [];
+  const dec_concatenatedOutput = Array.from({ length: decoderSentence.length }, () => new Array(dModelVal).fill(0));
+
+  for (let h = 0; h < numHeadsVal; h++) {
+    const qHead = dec_Qh_trans[h];
+    const kHead = dec_Kh_trans[h];
+    const vHead = dec_Vh_trans[h];
+
+    const rawHeadScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(safeDKVal));
+    dec_rawScores.push(rawHeadScores);
+
+    // Apply Causal Masking: for col j > row i, score is -Infinity
+    const maskedHeadScores = rawHeadScores.map((row, i) =>
+      row.map((val, j) => (j <= i ? val : -Infinity))
+    );
+    dec_maskedScores.push(maskedHeadScores);
+
+    // Softmax
+    const headWeights = softmaxRows(maskedHeadScores);
+    dec_weights.push(headWeights);
+
+    // Output heads
+    const headOutput = matmul(headWeights, vHead);
+    dec_outputHeads.push(headOutput);
+
+    // Concatenate
+    for (let i = 0; i < decoderSentence.length; i++) {
+      for (let d = 0; d < safeDKVal; d++) {
+        const destIdx = h * safeDKVal + d;
+        if (destIdx < dModelVal && headOutput[i] && d < headOutput[i].length) {
+          dec_concatenatedOutput[i][destIdx] = headOutput[i][d];
+        }
+      }
+    }
+  }
+
+  const dec_outputProj = matmul(dec_concatenatedOutput, Wo_dec).map((row) => row.map((v, c) => v + bo_dec[c]));
+
+  // Decoder Stage 3: Residual Connection 1 & LayerNorm 1
+  const dec_residual1 = dec_xPe.map((xRow, i) =>
+    xRow.map((v, c) => v + (dec_outputProj[i]?.[c] ?? 0))
+  );
+
+  const ln1_gamma_dec = getInteractiveBias('ln1_gamma_dec', dModelVal, lectureWeights).map((v, i) => (v === 0 ? 1 : v));
+  const ln1_beta_dec = getInteractiveBias('ln1_beta_dec', dModelVal, lectureWeights);
+
+  const dec_ln1_means = [];
+  const dec_ln1_vars = [];
+  const dec_ln1_norms = [];
+  const dec_ln1_outputs = [];
+
+  for (let i = 0; i < decoderSentence.length; i++) {
+    const row = dec_residual1[i];
+    if (!row || !row.length) {
+      dec_ln1_means.push(0);
+      dec_ln1_vars.push(0);
+      dec_ln1_norms.push([]);
+      dec_ln1_outputs.push([]);
+      continue;
+    }
+    const mean = row.reduce((a, b) => a + b, 0) / row.length;
+    const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / row.length;
+    const denom = Math.sqrt(variance + eps);
+    const norm = row.map((v) => (v - mean) / denom);
+    const outRow = norm.map((v, c) => v * (ln1_gamma_dec[c] ?? 1) + (ln1_beta_dec[c] ?? 0));
+
+    dec_ln1_means.push(mean);
+    dec_ln1_vars.push(variance);
+    dec_ln1_norms.push(norm);
+    dec_ln1_outputs.push(outRow);
+  }
+
+  const decoderState = {
+    embeds: dec_embeds,
+    pes: dec_pes,
+    xPe: dec_xPe,
+    Q: dec_Q,
+    K: dec_K,
+    V: dec_V,
+    Qh: dec_Qh,
+    Kh: dec_Kh,
+    Vh: dec_Vh,
+    Qh_trans: dec_Qh_trans,
+    Kh_trans: dec_Kh_trans,
+    Vh_trans: dec_Vh_trans,
+    rawScores: dec_rawScores,
+    maskedScores: dec_maskedScores,
+    weights: dec_weights,
+    outputHeads: dec_outputHeads,
+    concatenatedOutput: dec_concatenatedOutput,
+    outputProj: dec_outputProj,
+    residual1: dec_residual1,
+    ln1_means: dec_ln1_means,
+    ln1_vars: dec_ln1_vars,
+    ln1_norms: dec_ln1_norms,
+    ln1_outputs: dec_ln1_outputs
+  };
+
   if (!sentence || !sentence.length) {
     return {
       embeds: [],
@@ -181,7 +329,8 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
       ln2_means: [],
       ln2_vars: [],
       ln2_norms: [],
-      ln2_outputs: []
+      ln2_outputs: [],
+      decoder: decoderState
     };
   }
 
@@ -199,9 +348,6 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
   const bv = getInteractiveBias('bv', dModelVal, lectureWeights);
   const Wo = getInteractiveWeights('Wo', dModelVal, lectureWeights);
   const bo = getInteractiveBias('bo', dModelVal, lectureWeights);
-
-  const safeDKVal = Math.max(1, Math.floor(dModelVal / (numHeadsVal || 1)));
-
   // 3. Projections
   const Q = matmul(xPe, Wq).map((row) => row.map((v, c) => v + bq[c]));
   const K = matmul(xPe, Wk).map((row) => row.map((v, c) => v + bk[c]));
@@ -268,7 +414,6 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
   const ln1_vars = [];
   const ln1_norms = [];
   const ln1_outputs = [];
-  const eps = 1e-5;
 
   const ln1_gamma = getInteractiveBias('ln1_gamma', dModelVal, lectureWeights).map(() => 1.0); // defaults to 1.0
   const ln1_beta = getInteractiveBias('ln1_beta', dModelVal, lectureWeights); // defaults to 0.0
@@ -362,7 +507,8 @@ export function computeAttentionPipeline(sentence, dModelVal, numHeadsVal, dKVal
     ln2_means,
     ln2_vars,
     ln2_norms,
-    ln2_outputs
+    ln2_outputs,
+    decoder: decoderState
   };
 }
 

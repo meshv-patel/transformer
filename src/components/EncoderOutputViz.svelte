@@ -49,13 +49,12 @@
   $: seqLen = activeSentence.length;
 
   // --- Dynamic calculations using centralized pipeline ---
-  $: interactiveData = computeAttentionPipeline(
-    activeSentence,
-    currentDModel,
-    4,
-    currentDModel / 4,
-    $forwardPassData?.weights ?? {}
-  );
+  $: interactiveData = computeAttentionPipeline({
+    encoderSentence: activeSentence,
+    dModel: currentDModel,
+    numHeads: 4,
+    lectureWeights: $forwardPassData?.weights ?? {}
+  });
 
   $: precomputedInput = $forwardPassData?.stages?.find((s) => s.id === inputStageId)?.tokenVectors ?? [];
 

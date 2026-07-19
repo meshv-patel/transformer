@@ -2344,6 +2344,337 @@ export const SCENE_COPY = {
       ]
     }
   },
+  'dec-embedding': {
+    eyebrow: 'Decoder Setup · Word Embedding',
+    title: 'Decoder Word Embedding',
+    fourQuestions: {
+      whatIsHappening: 'We look up vector representations for target language tokens in the decoder vocabulary.',
+      why: 'The decoder requires high-dimensional vector representations of the target tokens (shifted right) to compute auto-regressive or sequence predictions.',
+      whatChanged: 'Target token IDs are mapped to dense d_model vectors.',
+      whatToObserve: 'Audience can observe how target token lookup functions identically to encoder embedding lookup.',
+    },
+    body: {
+      beginner: 'Just like the encoder converted input words into numerical vectors, the decoder converts target words (or start-of-sequence tokens) into vectors so it can begin generating translations or predictions.',
+      mtech: 'Target tokens Y are mapped to continuous embedding vectors E_dec[Y] of shape [target_seq_len, d_model]. During training, these are shifted right by one position.',
+      research: 'The decoder embedding matrix maps target token indices to d_model dimensional space. Often, the encoder and decoder share the same tied weight embedding matrix.',
+    },
+    deepDive: {
+      math: 'X_{\\text{dec}} = \\text{Embedding}(Y)',
+      complexity: 'O(target\\_seq\\_len \\times d\\_model) index lookups.',
+      matrixEquivalence: 'Row lookup from target embedding matrix.',
+      misconceptions: [
+        'The decoder input during inference is built auto-regressively token-by-token, whereas during training it is fed as a shifted target sequence.',
+      ],
+      notes: 'd_model = 16.',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why does the decoder need its own input embeddings?',
+          body: 'The decoder processes target tokens (or previous output tokens) to generate the next word in the sequence, requiring dense representations in the same model dimension.',
+        }
+      ],
+      example: {
+        left: [1, 5, 8],
+        right: [[0.1, -0.4, 0.2], [0.8, 0.2, -0.1], [-0.5, 0.9, 0.3]],
+        caption: 'Target token IDs converted into vector rows.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Target Token IDs', shape: null },
+      after: { label: 'Decoder Embeddings', shape: null },
+      whatChanged: 'Target token IDs converted to dense vectors.',
+      structured: {
+        entered: 'Target token IDs of shape [target_seq_len].',
+        happened: 'Matrix lookup from target embedding table.',
+        changed: 'Discrete IDs converted to d_model dimensional space.',
+        leaves: 'Target embedding matrix of shape [target_seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'In sequence-to-sequence Transformers, how are target tokens fed to the decoder during training?',
+      choices: [
+        'As a target sequence shifted right by one position (with a start-of-sequence token).',
+        'Directly mixed with the encoder input tokens in the same matrix.',
+        'As one-hot encoded scalar values without embedding lookup.',
+        'Across the batch dimension as fixed positional indices.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! During training, target tokens are shifted right by one position (prepended with <sos>) so the decoder learns to predict the next token.',
+      transition: 'Next, let\'s add positional information to the decoder embeddings.',
+      distractorNotes: {
+        1: 'Incorrect. Decoder inputs are processed in their own sub-block.',
+        2: 'Incorrect. Embedding lookups convert discrete IDs into continuous vectors.',
+        3: 'Incorrect. Tokens are embedded into the model dimension.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-embedding', code: 'dec_embeds = self.dec_embedding(target_ids)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-embedding', tex: 'X_{\\text{dec}} = E_{\\text{dec}}[Y]' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-embedding', equationTermId: 'eq-dec-embedding', codeLineId: 'code-dec-embedding' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Introduce decoder word embeddings.',
+        script: 'Welcome to the Transformer Decoder. Just like the encoder, the decoder starts by looking up vector representations for its target tokens.',
+        audienceQuestion: 'Are decoder embeddings formatted the same as encoder embeddings?',
+        expectedAnswer: 'Yes, both produce vectors in the model dimension d_model.',
+        misconception: 'Remind students that target sequences are shifted during training.',
+        transition: "Let's proceed to positional encoding."
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Explain that the decoder takes target tokens as input to learn auto-regressive generation.'
+      ],
+      misconceptions: [
+        'Target tokens are independent vectors before positional encodings are added.'
+      ],
+      suggestedQuestions: [
+        'Why do translation models shift target tokens to the right?'
+      ]
+    }
+  },
+  'dec-positional-enc': {
+    eyebrow: 'Decoder Setup · Positional Encoding',
+    title: 'Decoder Positional Encoding',
+    fourQuestions: {
+      whatIsHappening: 'We add sinusoidal positional encodings to the target token embeddings.',
+      why: 'Without positional encodings, the decoder would have no sense of word order in the target sequence.',
+      whatChanged: 'Target embeddings now carry position information along the sequence.',
+      whatToObserve: 'Audience can observe how sinusoidal position vectors are added element-wise to target embeddings.',
+    },
+    body: {
+      beginner: 'Just as in the encoder, words in the target sentence need order. We add a unique positional pattern to each target word vector so the decoder knows which word comes first, second, and so on.',
+      mtech: 'Decoder positional encodings PE_dec are added to target embeddings: X_pe = X_dec + PE_dec. This informs masked self-attention of temporal sequence order.',
+      research: 'Applies fixed sinusoidal or learned positional encodings to target representations, establishing temporal topology for auto-regressive predictions.',
+    },
+    deepDive: {
+      math: 'X_{\\text{dec\\_pe}} = X_{\\text{dec}} + PE',
+      complexity: 'O(target\\_seq\\_len \\times d\\_model) element-wise additions.',
+      matrixEquivalence: 'Element-wise addition of target PE matrix to target embedding matrix.',
+      misconceptions: [
+        'Decoder positional encodings use the exact same formula and dimensions as encoder positional encodings.',
+      ],
+      notes: 'Preserves shape [target_seq_len, d_model].',
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why does the decoder need positional encoding?',
+          body: 'Order matters in output generation. Adding positional encodings ensures that target word positions are distinguished during self-attention and cross-attention.',
+        }
+      ],
+      example: {
+        left: [0.2, -0.1, 0.4],
+        right: [0.0, 1.0, 0.0],
+        caption: 'Positional encoding vector added element-wise to target word embedding.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Decoder Embeddings', shape: null },
+      after: { label: 'Decoder Input + PE', shape: null },
+      whatChanged: 'Position signals combined with target word representations.',
+      structured: {
+        entered: 'Target embedding matrix of shape [target_seq_len, d_model].',
+        happened: 'Element-wise addition of sinusoidal positional table.',
+        changed: 'Target vectors now encode both word identity and sequence order.',
+        leaves: 'Decoder input matrix X_pe of shape [target_seq_len, d_model].',
+      }
+    },
+    quickCheck: {
+      question: 'What is the mathematical shape of the decoder representation after adding positional encoding?',
+      choices: [
+        '[target_seq_len, d_model] — the shape remains unchanged after element-wise addition.',
+        '[target_seq_len, 2 * d_model] — the dimension doubles to store position.',
+        '[d_model, d_model] — a square representation matrix.',
+        '[batch_size, target_seq_len] — scalar sequence indices.'
+      ],
+      correctIndex: 0,
+      explanation: 'Correct! Adding positional encodings is an element-wise addition, so the shape remains [target_seq_len, d_model].',
+      transition: 'Now the decoder input is ready to enter Masked Self-Attention.',
+      distractorNotes: {
+        1: 'Incorrect. Positional encoding is added, not concatenated.',
+        2: 'Incorrect. The sequence length is preserved.',
+        3: 'Incorrect. Vectors are dense embeddings.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-positional-enc', code: 'dec_x = dec_embeds + self.pos_encoder(dec_embeds)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-positional-enc', tex: 'X_{\\text{dec\\_pe}} = X_{\\text{dec}} + PE' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-positional-enc', equationTermId: 'eq-dec-positional-enc', codeLineId: 'code-dec-positional-enc' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain decoder positional encoding.',
+        script: 'We now add positional encoding vectors to our target word embeddings. This gives the decoder the position information it needs to predict words in order.',
+        audienceQuestion: 'Is the positional encoding formula different for the decoder?',
+        expectedAnswer: 'No, it uses the exact same sinusoidal formula as the encoder.',
+        misconception: 'Make sure students see that position vectors are added element-wise.',
+        transition: 'Decoder input setup is complete.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: [
+        'Emphasize that positional encoding ensures sequence order is preserved across target tokens.'
+      ],
+      misconceptions: [
+        'Positional encoding alters vector values without changing tensor dimensions.'
+      ]
+    }
+  },
+  'dec-residual-1': {
+    eyebrow: 'DECODER OPERATOR 3: SKIP CONNECTION',
+    title: 'Decoder Residual Connection ①',
+    fourQuestions: {
+      q1: 'What problem does the decoder residual connection solve?',
+      a1: 'It prevents vanishing gradients and preserves target token identity across self-attention sublayers.',
+      q2: 'What are the two input paths being added?',
+      a2: 'The skip connection from decoder positional encoding (X_dec_pe) and the masked self-attention output projection (O_dec).',
+      q3: 'Why must both tensors have the exact same shape?',
+      a3: 'Element-wise addition requires identical dimensions [target_seq_len, d_model].',
+      q4: 'How does this impact backpropagation?',
+      a4: 'Gradients flow directly through the skip connection without passing through projection weights.'
+    },
+    body: {
+      beginner: 'The residual connection adds the original decoder input vectors back to the result of masked self-attention.',
+      mtech: 'The skip connection forms X_dec + MultiHeadSelfAttention(X_dec), stabilizing gradient flow during training.',
+      research: 'Residual pathways allow deep decoder architectures (e.g. 96-layer models) to train stably without optimization collapse.'
+    },
+    deepDive: {
+      title: 'Residual Stream in Decoder Architectures',
+      content: 'In auto-regressive decoders, the residual stream carries target token representations forward while each sublayer writes additive updates.'
+    },
+    whyPanel: {
+      summary: 'Without residual connections, deep decoders suffer from severe gradient attenuation.'
+    },
+    beforeAfter: {
+      before: 'Unstabilized sublayer outputs',
+      after: 'Summed residual representation X_dec + O_dec'
+    },
+    quickCheck: {
+      question: 'What is the output of the first decoder residual connection?',
+      options: [
+        'X_dec_pe + Output_Proj',
+        'X_dec_pe * Output_Proj',
+        'LayerNorm(X_dec_pe)',
+        'Softmax(Output_Proj)'
+      ],
+      correctIndex: 0,
+      explanation: 'The first decoder residual connection computes element-wise addition X_dec_pe + Output_Proj.',
+      distractorNotes: {
+        1: 'Incorrect. Residual connections use addition, not multiplication.',
+        2: 'Incorrect. LayerNorm is applied after the residual connection.',
+        3: 'Incorrect. Softmax occurs inside self-attention.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-residual-1', code: 'x = x + self.self_attn(x)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-residual-1', tex: 'X_{\\text{res1}} = X_{\\text{dec\\_pe}} + \\text{OutputProj}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-residual-1', equationTermId: 'eq-dec-residual-1', codeLineId: 'code-dec-residual-1' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain the first decoder residual connection.',
+        script: 'We add the incoming target token representations back to the masked self-attention output.',
+        audienceQuestion: 'Why is this addition important for auto-regressive generation?',
+        expectedAnswer: 'It ensures target token identity is preserved alongside contextual updates.',
+        misconception: 'Make sure students see that both tensors have shape [seq_len, d_model].',
+        transition: 'Next, we normalize the combined representation with Layer Normalization.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Highlight how residual paths act as gradient highways during decoder training.'],
+      misconceptions: ['Residual addition does not alter tensor shapes.'],
+      suggestedQuestions: ['What would happen to target token identity without the skip connection?']
+    }
+  },
+  'dec-layer-norm-1': {
+    eyebrow: 'DECODER OPERATOR 4: NORMALIZATION',
+    title: 'Decoder Layer Normalization ①',
+    fourQuestions: {
+      q1: 'What is the goal of Decoder Layer Normalization?',
+      a1: 'To standardize feature distributions across target token vectors to mean 0 and variance 1.',
+      q2: 'Which dimension is normalized?',
+      a2: 'Each target token vector is normalized independently across its d_model feature dimension.',
+      q3: 'Why do we use learned parameters γ (gamma) and β (beta)?',
+      a3: 'To allow the network to re-scale and shift normalized representations back to optimal operational ranges.',
+      q4: 'How does LayerNorm differ from BatchNorm?',
+      a4: 'LayerNorm operates per token across features, making it independent of batch size and ideal for sequential decoding.'
+    },
+    body: {
+      beginner: 'Layer Normalization standardizes each target word representation so vector values remain balanced.',
+      mtech: 'LayerNorm computes mean and variance across d_model, normalizes, and applies element-wise affine transform γ * x_hat + β.',
+      research: 'Post-LN / Pre-LN placement controls signal dynamics in auto-regressive Transformer decoders.'
+    },
+    deepDive: {
+      title: 'Per-Token Normalization Invariance',
+      content: 'Because LayerNorm normalizes each target token independently, generation behavior remains invariant across varying batch sizes during inference.'
+    },
+    whyPanel: {
+      summary: 'Normalization prevents exploding / vanishing activations across decoder layers.'
+    },
+    beforeAfter: {
+      before: 'Unnormalized residual sum',
+      after: 'Normalized & affine-scaled output'
+    },
+    quickCheck: {
+      question: 'What are the target statistics after Layer Normalization (before γ and β scaling)?',
+      options: [
+        'Mean = 0, Variance = 1',
+        'Mean = 1, Variance = 0',
+        'Mean = 0.5, Variance = 0.5',
+        'Mean = -1, Variance = 1'
+      ],
+      correctIndex: 0,
+      explanation: 'Standard Layer Normalization centers feature values to mean 0 and scales variance to 1.',
+      distractorNotes: {
+        1: 'Incorrect. Zero variance would mean all values are identical.',
+        2: 'Incorrect. Mean is 0, not 0.5.',
+        3: 'Incorrect. Mean is centered at 0.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-layer-norm-1', code: 'x = self.norm1(x)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-layer-norm-1', tex: '\\text{LN}(x) = \\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} \\cdot \\gamma + \\beta' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-layer-norm-1', equationTermId: 'eq-dec-layer-norm-1', codeLineId: 'code-dec-layer-norm-1' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain decoder Layer Normalization.',
+        script: 'Now we normalize each target token representation across its feature dimension.',
+        audienceQuestion: 'Does LayerNorm look at future target tokens?',
+        expectedAnswer: 'No, LayerNorm operates per token across feature channels independently.',
+        misconception: 'Emphasize that normalization happens per row, independently across sequence tokens.',
+        transition: 'The self-attention block of the decoder is now complete and ready for cross-attention.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Demonstrate how mean and variance are calculated across the d_model columns of each row.'],
+      misconceptions: ['LayerNorm does not mix information across target tokens.'],
+      suggestedQuestions: ['Why is per-token LayerNorm ideal for auto-regressive decoding?']
+    }
+  }
 };
 
 export function getSceneCopy(id) {

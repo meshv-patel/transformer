@@ -2,7 +2,7 @@
   import { fly, fade } from 'svelte/transition';
   import { crossfade } from 'svelte/transition';
   import { cubicOut, quintOut } from 'svelte/easing';
-  import { subStepIndex, replayTick, dataMode } from '../../core/stores/sceneStore.js';
+  import { subStepIndex, replayTick, dataMode, currentScene } from '../../core/stores/sceneStore.js';
   import { dModel as configDModel } from '../../core/stores/configStore.js';
   import { forwardPassData } from '../../core/data-loader.js';
   import { selectedTokenPos } from '../../core/stores/tokenJourneyStore.js';
@@ -19,48 +19,65 @@
   import QuickCheck from '../../components/QuickCheck.svelte';
   import VectorHeatmap from '../../components/VectorHeatmap.svelte';
 
-  const copy = SCENE_COPY['positional-enc'];
+  $: sceneId = $currentScene?.id;
+  $: copy = SCENE_COPY[sceneId] || SCENE_COPY['positional-enc'];
+  $: sentenceType = $currentScene?.config?.sentenceType ?? 'encoder';
 
-  // Named sub-step constants — see docs/reference-implementation.md
-  // "External review response" §1 for why (readability, zero behavior change).
+  // Named sub-step constants
   const STEP = { PROBLEM: 0, TABLE: 1, COMBINE: 2, OUTPUT: 3, SUMMARY: 4, QUIZ: 5 };
 
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
+
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
+    if (sentenceType === 'decoder') {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
   function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    if (sentenceType === 'decoder') {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
   }
   function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (sentenceType === 'decoder') {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
   }
 
   // --- Data selection: Lecture (real precomputed) vs Interactive (live) ---
-  // Positional encoding has no "not trained" disclosure, unlike Embedding's
-  // Interactive Mode — it's a fixed formula in both modes, verified to
-  // match the offline-generated Lecture data exactly (see core/positional-encoding.js).
   $: lectureMeta = $forwardPassData?.meta ?? null;
   $: lectureEmbeddingStage = $forwardPassData?.stages?.find((s) => s.id === 'embedding') ?? null;
   $: lecturePEStage = $forwardPassData?.stages?.find((s) => s.id === 'positional-enc') ?? null;
 
-  $: activeSentence = $dataMode === 'lecture' ? (lectureMeta?.sentence ?? []) : interactiveSentence;
+  $: activeSentence = $dataMode === 'lecture'
+    ? (sentenceType === 'decoder' ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
+    : (sentenceType === 'decoder' ? interactiveTargetSentence : interactiveSentence);
+
   $: currentDModel = $dataMode === 'lecture' ? (lectureMeta?.dModel ?? 16) : $configDModel;
   $: seqLen = activeSentence.length;
 
-  $: embeddingVectors = $dataMode === 'lecture'
+  $: embeddingVectors = $dataMode === 'lecture' && sentenceType !== 'decoder'
     ? (lectureEmbeddingStage?.tokenVectors ?? [])
-    : interactiveSentence.map((w) => generateEmbeddingVector(w, $configDModel));
+    : activeSentence.map((w) => generateEmbeddingVector(w, currentDModel));
 
-  $: positionVectors = $dataMode === 'lecture'
+  $: positionVectors = $dataMode === 'lecture' && sentenceType !== 'decoder'
     ? (lecturePEStage?.pe ?? [])
     : sinusoidalPETable(seqLen, currentDModel);
 
-  $: summedVectors = $dataMode === 'lecture'
+  $: summedVectors = $dataMode === 'lecture' && sentenceType !== 'decoder'
     ? (lecturePEStage?.tokenVectors ?? [])
     : embeddingVectors.map((e, i) => addVectors(e, positionVectors[i]));
 

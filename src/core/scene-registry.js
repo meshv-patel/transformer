@@ -26,6 +26,24 @@ export const SCENES = [
   { id: 'residual-2',       group: 'FeedFwd',   title: 'Residual Connection',       subSteps: ['main-path', 'skip-path', 'addition', 'before-after', 'quick-check'] },
   { id: 'layer-norm-2',     group: 'FeedFwd',   title: 'Layer Normalization',       subSteps: ['statistics', 'normalize', 'scale-shift', 'before-after', 'quick-check'] },
   { id: 'encoder-output',   group: 'FeedFwd',   title: 'Encoder Output',            subSteps: ['final-representation', 'context', 'applications', 'before-after', 'quick-check'] },
+
+  { id: 'dec-embedding',      group: 'DecoderSetup', title: 'Decoder Word Embedding',      subSteps: ['lookup-table', 'vector-materialize', 'before-after', 'quick-check'], config: { sentenceType: 'decoder' } },
+  { id: 'dec-positional-enc', group: 'DecoderSetup', title: 'Decoder Positional Encoding', subSteps: ['problem', 'table', 'combine', 'output', 'before-after', 'quick-check'], config: { sentenceType: 'decoder' } },
+
+  { id: 'dec-proj-q',         group: 'DecoderAttention', title: 'Decoder Projection to Q',    subSteps: ['weight-matrix', 'matmul', 'before-after', 'quick-check'], config: { stream: 'decoder', proj: 'q' } },
+  { id: 'dec-proj-k',         group: 'DecoderAttention', title: 'Decoder Projection to K',    subSteps: ['weight-matrix', 'matmul', 'before-after', 'quick-check'], config: { stream: 'decoder', proj: 'k' } },
+  { id: 'dec-proj-v',         group: 'DecoderAttention', title: 'Decoder Projection to V',    subSteps: ['weight-matrix', 'matmul', 'before-after', 'quick-check'], config: { stream: 'decoder', proj: 'v' } },
+  { id: 'dec-split-heads',    group: 'DecoderAttention', title: 'Decoder Split Heads',        subSteps: ['reshape', 'transpose', 'before-after', 'quick-check'], config: { stream: 'decoder' } },
+  { id: 'dec-qk-matmul',      group: 'DecoderAttention', title: 'Decoder Q × Kᵀ (Raw Scores)',subSteps: ['attention-grid', 'before-after', 'quick-check'], config: { stream: 'decoder', matrixType: 'scores' } },
+  { id: 'dec-causal-mask',    group: 'DecoderAttention', title: 'Causal Masking (Lower Δ)',   subSteps: ['mask-matrix', 'before-after', 'quick-check'], config: { stream: 'decoder', matrixType: 'masked-scores', showCausalMask: true } },
+  { id: 'dec-scale-softmax',  group: 'DecoderAttention', title: 'Decoder Masked Softmax',     subSteps: ['divide-sqrt-dk', 'softmax-curve', 'before-after', 'quick-check'], config: { stream: 'decoder', matrixType: 'weights', showCausalMask: true } },
+  { id: 'dec-weighted-sum',   group: 'DecoderAttention', title: 'Decoder Weighted Sum',      subSteps: ['weight-values', 'sum', 'before-after', 'quick-check'], config: { stream: 'decoder' } },
+  { id: 'dec-heads-compare',  group: 'DecoderAttention', title: 'Decoder Attention Heads',    subSteps: ['per-head-heatmaps', 'before-after', 'quick-check'], config: { stream: 'decoder', matrixType: 'per-head', showCausalMask: true } },
+  { id: 'dec-concat',         group: 'DecoderAttention', title: 'Decoder Concatenation',      subSteps: ['stitch-heads', 'before-after', 'quick-check'], config: { stream: 'decoder', mode: 'concat' } },
+  { id: 'dec-output-proj',    group: 'DecoderAttention', title: 'Decoder Output Projection',  subSteps: ['weight-matrix', 'matmul', 'before-after', 'quick-check'], config: { stream: 'decoder', proj: 'o' } },
+
+  { id: 'dec-residual-1',     group: 'DecoderResidual',  title: 'Decoder Residual Connection ①', subSteps: ['main-path', 'skip-path', 'addition', 'before-after', 'quick-check'], config: { stream: 'decoder', stage: 'residual-1' } },
+  { id: 'dec-layer-norm-1',   group: 'DecoderResidual',  title: 'Decoder Layer Normalization ①', subSteps: ['statistics', 'normalize', 'scale-shift', 'before-after', 'quick-check'], config: { stream: 'decoder', stage: 'layer-norm-1' } },
 ];
 
 export const SCENE_INDEX = Object.fromEntries(SCENES.map((s, i) => [s.id, i]));

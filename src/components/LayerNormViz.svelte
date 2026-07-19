@@ -37,46 +37,67 @@
 
   $: activeTitle = title || (sceneId === 'layer-norm-2' ? 'Layer Normalization ②' : 'Layer Normalization ①');
 
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: isDecoderStream = stream === 'decoder';
+
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
+
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
+    if (isDecoderStream) {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
+
   function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    if (isDecoderStream) {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
   }
+
   function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (isDecoderStream) {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
   }
 
   $: activeSentence = $dataMode === 'lecture'
-    ? ($forwardPassData?.meta?.sentence ?? [])
-    : interactiveSentence;
+    ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : ($forwardPassData?.meta?.sentence ?? []))
+    : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
+
   $: currentDModel = $dataMode === 'lecture' ? ($forwardPassData?.meta?.dModel ?? 16) : $configDModel;
   $: seqLen = activeSentence.length;
 
   // --- Dynamic calculations using centralized pipeline ---
-  $: interactiveData = computeAttentionPipeline(
-    activeSentence,
-    currentDModel,
-    4,
-    currentDModel / 4,
-    $forwardPassData?.weights ?? {}
-  );
+  $: interactiveData = computeAttentionPipeline({
+    encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
+    decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
+    dModel: currentDModel,
+    numHeads: 4,
+    lectureWeights: $forwardPassData?.weights ?? {}
+  });
+
+  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
 
   $: precomputedInput = $forwardPassData?.stages?.find((s) => s.id === activeInputStageId)?.tokenVectors ?? [];
   $: precomputedOutput = $forwardPassData?.stages?.find((s) => s.id === activeOutputStageId)?.tokenVectors ?? [];
 
-  // Input representation (Residual Output)
-  $: inputMatrix = $dataMode === 'lecture'
+  // Input representation (Residual Output 1)
+  $: inputMatrix = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedInput
-    : (sceneId === 'layer-norm-2'
-        ? (precomputedInput.length ? precomputedInput.map(r => r.slice(0, currentDModel)) : Array.from({ length: seqLen }, () => new Array(currentDModel).fill(0))) // fallback
-        : (interactiveData?.residual1 ?? [])
-      );
+    : (activePipeline?.residual1 ?? []);
 
   // Computing live Mean and Variance
   $: statistics = (() => {
@@ -98,12 +119,9 @@
   })();
 
   // Output representation
-  $: outputMatrix = $dataMode === 'lecture'
+  $: outputMatrix = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedOutput
-    : (sceneId === 'layer-norm-2'
-        ? (precomputedOutput.length ? precomputedOutput.map(r => r.slice(0, currentDModel)) : Array.from({ length: seqLen }, () => new Array(currentDModel).fill(0)))
-        : (interactiveData?.ln1_outputs ?? [])
-      );
+    : (activePipeline?.ln1_outputs ?? []);
 
   // Gamma and Beta parameters
   $: gamma = $forwardPassData?.weights?.[activeGammaKey] ?? Array(currentDModel).fill(1.0);

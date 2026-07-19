@@ -40,60 +40,78 @@
   $: activeOutputLabel = outputLabel || (sceneId === 'residual-2' ? 'Residual Output ②' : 'Residual Output ①');
   $: activeHighlightId = highlightId || (sceneId === 'residual-2' ? 'eq-residual-2' : 'eq-residual-1');
 
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: isDecoderStream = stream === 'decoder';
+
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
+
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
+    if (isDecoderStream) {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
+
   function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    if (isDecoderStream) {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
   }
+
   function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (isDecoderStream) {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
   }
 
   $: activeSentence = $dataMode === 'lecture'
-    ? ($forwardPassData?.meta?.sentence ?? [])
-    : interactiveSentence;
+    ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : ($forwardPassData?.meta?.sentence ?? []))
+    : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
+
   $: currentDModel = $dataMode === 'lecture' ? ($forwardPassData?.meta?.dModel ?? 16) : $configDModel;
   $: seqLen = activeSentence.length;
 
   // --- Dynamic calculations using centralized pipeline ---
-  $: interactiveData = computeAttentionPipeline(
-    activeSentence,
-    currentDModel,
-    4,
-    currentDModel / 4,
-    $forwardPassData?.weights ?? {}
-  );
+  $: interactiveData = computeAttentionPipeline({
+    encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
+    decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
+    dModel: currentDModel,
+    numHeads: 4,
+    lectureWeights: $forwardPassData?.weights ?? {}
+  });
+
+  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
 
   $: precomputedInput1 = $forwardPassData?.stages?.find((s) => s.id === activeInput1StageId)?.tokenVectors ?? [];
   $: precomputedInput2 = $forwardPassData?.stages?.find((s) => s.id === activeInput2StageId)?.tokenVectors ?? [];
   $: precomputedOutput = $forwardPassData?.stages?.find((s) => s.id === activeOutputStageId)?.tokenVectors ?? [];
 
-  // Input 1 calculation
-  $: input1 = $dataMode === 'lecture'
+  // Input 1 calculation (skip connection from input)
+  $: input1 = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedInput1
-    : (sceneId === 'residual-2'
-        ? (precomputedInput1.length ? precomputedInput1.map(r => r.slice(0, currentDModel)) : Array.from({ length: seqLen }, () => new Array(currentDModel).fill(0))) // residual-2 fallback for now
-        : (interactiveData?.xPe ?? [])
-      );
+    : (activePipeline?.xPe ?? []);
 
-  // Input 2 calculation
-  $: input2 = $dataMode === 'lecture'
+  // Input 2 calculation (sublayer output, e.g. output projection)
+  $: input2 = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedInput2
-    : (sceneId === 'residual-2'
-        ? (precomputedInput2.length ? precomputedInput2.map(r => r.slice(0, currentDModel)) : Array.from({ length: seqLen }, () => new Array(currentDModel).fill(0)))
-        : (interactiveData?.outputProj ?? [])
-      );
+    : (activePipeline?.outputProj ?? []);
 
-  // Output calculation
-  $: output = $dataMode === 'lecture'
+  // Output calculation (residual sum)
+  $: output = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedOutput
-    : addMatrices(input1, input2);
+    : (activePipeline?.residual1 ?? addMatrices(input1, input2));
 
   // Highlighting synchronization
   let activeHoverIdx = null;

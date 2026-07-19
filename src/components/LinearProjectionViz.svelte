@@ -30,88 +30,113 @@
   // Reactively resolve parameters based on currentScene or props
   $: sceneId = $currentScene?.id;
 
-  $: activeRole = role || (
-    sceneId === 'proj-q' ? 'q' :
-    sceneId === 'proj-k' ? 'k' :
-    sceneId === 'proj-v' ? 'v' :
-    sceneId === 'output-proj' ? 'o' : 'q'
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: configProj = $currentScene?.config?.proj ?? null;
+  $: isDecoderStream = stream === 'decoder';
+
+  $: activeRole = role || configProj || (
+    sceneId === 'proj-q' || sceneId === 'dec-proj-q' ? 'q' :
+    sceneId === 'proj-k' || sceneId === 'dec-proj-k' ? 'k' :
+    sceneId === 'proj-v' || sceneId === 'dec-proj-v' ? 'v' :
+    sceneId === 'output-proj' || sceneId === 'dec-output-proj' ? 'o' : 'q'
   );
 
   $: activeWeightKey = weightKey || (
-    sceneId === 'proj-q' ? 'Wq' :
-    sceneId === 'proj-k' ? 'Wk' :
-    sceneId === 'proj-v' ? 'Wv' :
-    sceneId === 'output-proj' ? 'Wo' : 'Wq'
+    activeRole === 'q' ? (isDecoderStream ? 'Wq_dec' : 'Wq') :
+    activeRole === 'k' ? (isDecoderStream ? 'Wk_dec' : 'Wk') :
+    activeRole === 'v' ? (isDecoderStream ? 'Wv_dec' : 'Wv') :
+    (isDecoderStream ? 'Wo_dec' : 'Wo')
   );
 
   $: activeBiasKey = biasKey || (
-    sceneId === 'proj-q' ? 'bq' :
-    sceneId === 'proj-k' ? 'bk' :
-    sceneId === 'proj-v' ? 'bv' :
-    sceneId === 'output-proj' ? 'bo' : 'bq'
+    activeRole === 'q' ? (isDecoderStream ? 'bq_dec' : 'bq') :
+    activeRole === 'k' ? (isDecoderStream ? 'bk_dec' : 'bk') :
+    activeRole === 'v' ? (isDecoderStream ? 'bv_dec' : 'bv') :
+    (isDecoderStream ? 'bo_dec' : 'bo')
   );
 
   $: activeStageId = stageId || sceneId || 'proj-q';
-  $: activeInputStageId = inputStageId || (
-    sceneId === 'output-proj' ? 'weighted-sum' : 'positional-enc'
-  );
+  $: activeInputStageId = inputStageId || (activeRole === 'o' ? 'weighted-sum' : 'positional-enc');
 
   // Sub-step index definitions
   const STEP = { WEIGHTS: 0, MATMUL: 1, SUMMARY: 2, QUIZ: 3 };
 
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
+  const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
   const MAX_INTERACTIVE_TOKENS = 6;
+
   let interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+  let interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
 
   function addWord(word) {
-    if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
-    interactiveSentence = [...interactiveSentence, word];
-  }
-  function removeWord(index) {
-    interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
-  }
-  function resetSentence() {
-    interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    if (isDecoderStream) {
+      if (interactiveTargetSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveTargetSentence = [...interactiveTargetSentence, word];
+    } else {
+      if (interactiveSentence.length >= MAX_INTERACTIVE_TOKENS) return;
+      interactiveSentence = [...interactiveSentence, word];
+    }
   }
 
-  // --- Data selection: Lecture (precomputed) vs Interactive (live) ---
+  function removeWord(index) {
+    if (isDecoderStream) {
+      interactiveTargetSentence = interactiveTargetSentence.filter((_, i) => i !== index);
+    } else {
+      interactiveSentence = interactiveSentence.filter((_, i) => i !== index);
+    }
+  }
+
+  function resetSentence() {
+    if (isDecoderStream) {
+      interactiveTargetSentence = [...DEFAULT_TARGET_SENTENCE];
+    } else {
+      interactiveSentence = [...DEFAULT_INTERACTIVE_SENTENCE];
+    }
+  }
+
+  // --- Data Selection: Lecture vs Interactive ---
   $: lectureMeta = $forwardPassData?.meta ?? null;
   $: lectureInputStage = $forwardPassData?.stages?.find((s) => s.id === activeInputStageId) ?? null;
   $: lectureOutputStage = $forwardPassData?.stages?.find((s) => s.id === activeStageId) ?? null;
   $: lectureWeights = $forwardPassData?.weights ?? {};
 
-  $: activeSentence = $dataMode === 'lecture' ? (lectureMeta?.sentence ?? []) : interactiveSentence;
+  $: activeSentence = $dataMode === 'lecture'
+    ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
+    : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
+
   $: currentDModel = $dataMode === 'lecture' ? (lectureMeta?.dModel ?? 16) : $configDModel;
   $: seqLen = activeSentence.length;
 
   // Compute or select input vectors
-  $: interactiveData = computeAttentionPipeline(
-    activeSentence,
-    currentDModel,
-    4,
-    currentDModel / 4,
+  $: interactiveData = computeAttentionPipeline({
+    encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
+    decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
+    dModel: currentDModel,
+    numHeads: 4,
     lectureWeights
-  );
+  });
 
-  $: activeInputVectors = $dataMode === 'lecture'
+  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+
+  $: activeInputVectors = $dataMode === 'lecture' && !isDecoderStream
     ? (lectureInputStage?.tokenVectors ?? [])
-    : (activeStageId === 'output-proj' ? (interactiveData?.concatenatedOutput ?? []) : (interactiveData?.xPe ?? []));
+    : (activeRole === 'o' ? (activePipeline?.concatenatedOutput ?? []) : (activePipeline?.xPe ?? []));
 
-  $: activeWeightMatrix = $dataMode === 'lecture'
+  $: activeWeightMatrix = $dataMode === 'lecture' && !isDecoderStream
     ? (lectureWeights[activeWeightKey] ?? [])
     : getInteractiveWeights(activeWeightKey, currentDModel, lectureWeights);
 
-  $: activeBias = $dataMode === 'lecture'
+  $: activeBias = $dataMode === 'lecture' && !isDecoderStream
     ? (lectureWeights[activeBiasKey] ?? [])
     : getInteractiveBias(activeBiasKey, currentDModel, lectureWeights);
 
-  $: activeOutputVectors = $dataMode === 'lecture'
+  $: activeOutputVectors = $dataMode === 'lecture' && !isDecoderStream
     ? (lectureOutputStage?.tokenVectors ?? [])
     : (
-      activeStageId === 'proj-q' ? (interactiveData?.Q ?? []) :
-      activeStageId === 'proj-k' ? (interactiveData?.K ?? []) :
-      activeStageId === 'proj-v' ? (interactiveData?.V ?? []) :
-      activeStageId === 'output-proj' ? (interactiveData?.outputProj ?? []) : []
+      activeRole === 'q' ? (activePipeline?.Q ?? []) :
+      activeRole === 'k' ? (activePipeline?.K ?? []) :
+      activeRole === 'v' ? (activePipeline?.V ?? []) :
+      (activePipeline?.outputProj ?? [])
     );
 
   // --- Dynamic Styling based on Projection Role ---
