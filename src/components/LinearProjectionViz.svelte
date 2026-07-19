@@ -2,7 +2,7 @@
   import { fly, fade } from 'svelte/transition';
   import { cubicOut, quintOut } from 'svelte/easing';
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
-  import { dModel as configDModel } from '../core/stores/configStore.js';
+  import { dModel as configDModel, numHeads as configNumHeads } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
   import { selectedTokenPos } from '../core/stores/tokenJourneyStore.js';
   import { highlightedTermId, setHighlight, clearHighlight } from '../core/stores/highlightStore.js';
@@ -16,6 +16,8 @@
   import VectorHeatmap from './VectorHeatmap.svelte';
   import BeforeAfterSummary from './BeforeAfterSummary.svelte';
   import QuickCheck from './QuickCheck.svelte';
+
+  const STEP = { WEIGHTS: 0, MATMUL: 1, SUMMARY: 2, QUIZ: 3 };
 
   // Scene copy config
   $: copy = getSceneCopy($currentScene?.id);
@@ -104,6 +106,7 @@
     : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
 
   $: currentDModel = $dataMode === 'lecture' ? (lectureMeta?.dModel ?? 16) : $configDModel;
+  $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
   $: seqLen = activeSentence.length;
 
   // Compute or select input vectors
@@ -111,7 +114,7 @@
     encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
     decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
     dModel: currentDModel,
-    numHeads: 4,
+    numHeads: configNumHeadsVal,
     lectureWeights
   });
 

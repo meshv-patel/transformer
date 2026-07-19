@@ -1,6 +1,6 @@
 <script>
   import { subStepIndex, dataMode, currentScene } from '../core/stores/sceneStore.js';
-  import { dModel as configDModel } from '../core/stores/configStore.js';
+  import { dModel as configDModel, numHeads as configNumHeads } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
   import { computeAttentionPipeline } from '../core/tensor-ops.js';
   import { cellColor } from '../core/heatmap-color.js';
@@ -30,13 +30,14 @@
 
   $: activeSentence = interactiveTargetSentence;
   $: currentDModel = $configDModel;
+  $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
   $: seqLen = activeSentence.length;
 
   $: interactiveData = computeAttentionPipeline({
     encoderSentence: ['cat', 'chased', 'dog'],
     decoderSentence: activeSentence,
     dModel: currentDModel,
-    numHeads: 4,
+    numHeads: configNumHeadsVal,
     lectureWeights: $forwardPassData?.weights ?? {}
   });
 

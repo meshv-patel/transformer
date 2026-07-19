@@ -1,7 +1,7 @@
 <script>
   import { fade } from 'svelte/transition';
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
-  import { dModel as configDModel } from '../core/stores/configStore.js';
+  import { dModel as configDModel, numHeads as configNumHeads } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
   import { highlightedTermId, setHighlight, clearHighlight } from '../core/stores/highlightStore.js';
   import { computeAttentionPipeline } from '../core/tensor-ops.js';
@@ -46,13 +46,14 @@
     ? ($forwardPassData?.meta?.sentence ?? [])
     : interactiveSentence;
   $: currentDModel = $dataMode === 'lecture' ? ($forwardPassData?.meta?.dModel ?? 16) : $configDModel;
+  $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
   $: seqLen = activeSentence.length;
 
   // --- Dynamic calculations using centralized pipeline ---
   $: interactiveData = computeAttentionPipeline({
     encoderSentence: activeSentence,
     dModel: currentDModel,
-    numHeads: 4,
+    numHeads: configNumHeadsVal,
     lectureWeights: $forwardPassData?.weights ?? {}
   });
 

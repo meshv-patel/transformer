@@ -82,6 +82,8 @@
     }
   }
 
+  $: lectureMeta = $forwardPassData?.meta ?? null;
+
   $: activeSentence = $dataMode === 'lecture'
     ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
     : (labels.length ? labels : (isDecoderStream ? interactiveTargetSentence : interactiveSentence));

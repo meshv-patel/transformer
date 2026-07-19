@@ -308,6 +308,43 @@ export function computeAttentionPipeline({
   };
 
   if (!sentence || !sentence.length) {
+    decoderState.crossAttention = {
+      queryInput: [],
+      keyValueInput: [],
+      Q: [], K: [], V: [],
+      Qh: [], Kh: [], Vh: [],
+      Qh_trans: [], Kh_trans: [], Vh_trans: [],
+      scores: [],
+      weights: [],
+      outputHeads: [],
+      concatenatedOutput: [],
+      outputProj: [],
+      residual2: [],
+      ln2_means: [],
+      ln2_vars: [],
+      ln2_norms: [],
+      ln2_outputs: []
+    };
+    decoderState.ffn = {
+      linear1: [],
+      activation: [],
+      outputs: [],
+      residual3: [],
+      ln3_means: [],
+      ln3_vars: [],
+      ln3_norms: [],
+      ln3_outputs: []
+    };
+    decoderState.finalOutput = [];
+    decoderState.vocabProjection = {
+      logits: [],
+      probabilities: [],
+      predictedIndex: 0,
+      predictedToken: '<unk>',
+      topK: [],
+      vocabulary: ['cat', 'chased', 'dog', 'ran', 'slowly', 'the', '<eos>', 'mouse', 'barks', 'fast']
+    };
+
     return {
       embeds: [],
       pes: [],
@@ -418,7 +455,7 @@ export function computeAttentionPipeline({
   const ln1_norms = [];
   const ln1_outputs = [];
 
-  const ln1_gamma = getInteractiveBias('ln1_gamma', dModelVal, lectureWeights).map(() => 1.0); // defaults to 1.0
+  const ln1_gamma = getInteractiveBias('ln1_gamma', dModelVal, lectureWeights).map((v) => (v === 0 ? 1 : v));
   const ln1_beta = getInteractiveBias('ln1_beta', dModelVal, lectureWeights); // defaults to 0.0
 
   for (let i = 0; i < sentence.length; i++) {
@@ -462,7 +499,7 @@ export function computeAttentionPipeline({
   const ln2_norms = [];
   const ln2_outputs = [];
 
-  const ln2_gamma = getInteractiveBias('ln2_gamma', dModelVal, lectureWeights).map(() => 1.0); // defaults to 1.0
+  const ln2_gamma = getInteractiveBias('ln2_gamma', dModelVal, lectureWeights).map((v) => (v === 0 ? 1 : v));
   const ln2_beta = getInteractiveBias('ln2_beta', dModelVal, lectureWeights); // defaults to 0.0
 
   for (let i = 0; i < sentence.length; i++) {

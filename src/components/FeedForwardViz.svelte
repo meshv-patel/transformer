@@ -1,7 +1,7 @@
 <script>
   import { fade } from 'svelte/transition';
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
-  import { dModel as configDModel } from '../core/stores/configStore.js';
+  import { dModel as configDModel, numHeads as configNumHeads } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
   import { highlightedTermId, setHighlight, clearHighlight } from '../core/stores/highlightStore.js';
   import { computeAttentionPipeline, getInteractiveWeights2D, getInteractiveBias1D } from '../core/tensor-ops.js';
@@ -80,6 +80,7 @@
     ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : ($forwardPassData?.meta?.sentence ?? []))
     : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
   $: currentDModel = $dataMode === 'lecture' ? ($forwardPassData?.meta?.dModel ?? 16) : $configDModel;
+  $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
   $: seqLen = activeSentence.length;
   $: dFF = currentDModel * 2;
 
@@ -88,7 +89,7 @@
     encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
     decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
     dModel: currentDModel,
-    numHeads: 4,
+    numHeads: configNumHeadsVal,
     lectureWeights: $forwardPassData?.weights ?? {}
   });
 
@@ -117,12 +118,12 @@
 
   // Interactive mode weight matrices
   $: W_ffn1 = $dataMode === 'lecture' && !isDecoderStream
-    ? ($forwardPassData?.weights?.W_ffn1 ?? [])
-    : getInteractiveWeights2D(isDecoderStream ? 'W_ffn1_dec' : 'W_ffn1', currentDModel, dFF, $forwardPassData?.weights ?? {});
+    ? ($forwardPassData?.weights?.[activeWeight1Key] ?? [])
+    : getInteractiveWeights2D(isDecoderStream ? 'W_ffn1_dec' : activeWeight1Key, currentDModel, dFF, $forwardPassData?.weights ?? {});
 
   $: W_ffn2 = $dataMode === 'lecture' && !isDecoderStream
-    ? ($forwardPassData?.weights?.W_ffn2 ?? [])
-    : getInteractiveWeights2D(isDecoderStream ? 'W_ffn2_dec' : 'W_ffn2', dFF, currentDModel, $forwardPassData?.weights ?? {});
+    ? ($forwardPassData?.weights?.[activeWeight2Key] ?? [])
+    : getInteractiveWeights2D(isDecoderStream ? 'W_ffn2_dec' : activeWeight2Key, dFF, currentDModel, $forwardPassData?.weights ?? {});
 
   // Active hover highlights
   let activeHoverIdx = 0;

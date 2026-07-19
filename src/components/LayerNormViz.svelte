@@ -1,7 +1,7 @@
 <script>
   import { fade } from 'svelte/transition';
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
-  import { dModel as configDModel } from '../core/stores/configStore.js';
+  import { dModel as configDModel, numHeads as configNumHeads } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
   import { highlightedTermId, setHighlight, clearHighlight } from '../core/stores/highlightStore.js';
   import { computeAttentionPipeline } from '../core/tensor-ops.js';
@@ -78,6 +78,7 @@
     : (isDecoderStream ? interactiveTargetSentence : interactiveSentence);
 
   $: currentDModel = $dataMode === 'lecture' ? ($forwardPassData?.meta?.dModel ?? 16) : $configDModel;
+  $: configNumHeadsVal = $dataMode === 'lecture' ? ($forwardPassData?.meta?.numHeads ?? 4) : $configNumHeads;
   $: seqLen = activeSentence.length;
 
   // --- Dynamic calculations using centralized pipeline ---
@@ -85,14 +86,12 @@
     encoderSentence: isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence,
     decoderSentence: isDecoderStream ? activeSentence : ['the', 'dog', 'ran'],
     dModel: currentDModel,
-    numHeads: 4,
+    numHeads: configNumHeadsVal,
     lectureWeights: $forwardPassData?.weights ?? {}
   });
 
-  $: stream = $currentScene?.config?.stream ?? 'encoder';
   $: attentionType = $currentScene?.config?.attentionType ?? 'self';
   $: stageConfig = $currentScene?.config?.stage ?? 'layer-norm-1';
-  $: isDecoderStream = stream === 'decoder';
   $: isDecoderLN3 = isDecoderStream && (stageConfig === 'layernorm3' || stageConfig === 'layer-norm-3');
   $: isCrossAttention = (attentionType === 'cross' || stageConfig === 'layer-norm-2') && !isDecoderLN3;
 
