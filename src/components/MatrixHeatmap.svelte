@@ -45,9 +45,11 @@
     : $subStepIndex === stepMap.ATTENTION_GRID;
 
   $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: attentionType = $currentScene?.config?.attentionType ?? 'self';
   $: isDecoderStream = stream === 'decoder';
+  $: isCrossAttention = attentionType === 'cross';
   $: matrixType = $currentScene?.config?.matrixType ?? null;
-  $: showCausalMask = $currentScene?.config?.showCausalMask ?? (sceneId === 'dec-causal-mask' || sceneId === 'dec-scale-softmax' || sceneId === 'dec-heads-compare');
+  $: showCausalMask = isCrossAttention ? false : ($currentScene?.config?.showCausalMask ?? (sceneId === 'dec-causal-mask' || sceneId === 'dec-scale-softmax' || sceneId === 'dec-heads-compare'));
 
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
   const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
@@ -84,8 +86,10 @@
     ? (isDecoderStream ? ['the', 'dog', 'ran', 'slowly'] : (lectureMeta?.sentence ?? []))
     : (labels.length ? labels : (isDecoderStream ? interactiveTargetSentence : interactiveSentence));
 
-  $: resolvedLabels = labels.length ? labels : activeSentence;
-  $: seqLen = resolvedLabels.length;
+  $: resolvedRowLabels = labels.length ? labels : activeSentence;
+  $: resolvedColLabels = isCrossAttention ? (isDecoderStream ? ['cat', 'chased', 'dog'] : activeSentence) : resolvedRowLabels;
+  $: resolvedLabels = resolvedRowLabels;
+  $: seqLen = resolvedRowLabels.length;
   $: currentDModel = $dataMode === 'lecture' ? ($forwardPassData?.meta?.dModel ?? 16) : $configDModel;
 
   // Resolve weights from store for interactive calculations
@@ -102,7 +106,9 @@
     lectureWeights
   });
 
-  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+  $: activePipeline = isCrossAttention
+    ? interactiveData?.decoder?.crossAttention
+    : (isDecoderStream ? interactiveData?.decoder : interactiveData);
 
   // Resolve the matrix data reactively
   $: resolvedMatrix = matrix.length ? matrix : (
@@ -135,6 +141,12 @@
 
   function computeInteractiveMatrix(id, step) {
     if (!activePipeline) return [];
+    if (isCrossAttention) {
+      if (matrixType === 'scores' || id === 'dec-cross-qk-matmul') {
+        return activePipeline.scores;
+      }
+      return activePipeline.weights;
+    }
     if (isDecoderStream) {
       if (matrixType === 'scores' || id === 'dec-qk-matmul') {
         return activePipeline.rawScores;
@@ -347,7 +359,7 @@
                       <!-- Column headers (Key tokens) -->
                       <div class="col-headers">
                         <div class="corner-space"></div>
-                        {#each resolvedLabels as label, c}
+                        {#each resolvedColLabels as label, c}
                           <span class="col-header-label" class:active-col={hoveredCol === c}>{label}</span>
                         {/each}
                       </div>
@@ -355,7 +367,7 @@
                       <!-- Rows -->
                       {#each headMatrix as row, r}
                         <div class="grid-row">
-                          <span class="row-header-label" class:active-row={hoveredRow === r}>{resolvedLabels[r]}</span>
+                          <span class="row-header-label" class:active-row={hoveredRow === r}>{resolvedRowLabels[r]}</span>
                           {#each row as val, c}
                             <!-- svelte-ignore a11y-interactive-supports-focus -->
                             <div
@@ -364,8 +376,8 @@
                               style="background: {formatCellColor(val, c > r && showCausalMask)};"
                               role="button"
                               tabindex="0"
-                              aria-label={`Head ${h}, row ${resolvedLabels[r]} Query, col ${resolvedLabels[c]} Key: value ${formatCellText(val, c > r && showCausalMask)}`}
-                              title={`${resolvedLabels[r]} ↔ ${resolvedLabels[c]}: ${formatCellText(val, c > r && showCausalMask)}`}
+                              aria-label={`Head ${h}, row ${resolvedRowLabels[r]} Query, col ${resolvedColLabels[c]} Key: value ${formatCellText(val, c > r && showCausalMask)}`}
+                              title={`${resolvedRowLabels[r]} ↔ ${resolvedColLabels[c]}: ${formatCellText(val, c > r && showCausalMask)}`}
                               in:fade={{ duration: 120, delay: prefersReducedMotion ? 0 : (r * seqLen + c) * 35 }}
                             ></div>
                           {/each}
@@ -380,7 +392,7 @@
                   <!-- Column headers (Key tokens) -->
                   <div class="col-headers">
                     <div class="corner-space"></div>
-                    {#each resolvedLabels as label, c}
+                    {#each resolvedColLabels as label, c}
                       <span class="col-header-label" class:active-col={hoveredCol === c}>{label}</span>
                     {/each}
                   </div>

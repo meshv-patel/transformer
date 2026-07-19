@@ -92,26 +92,47 @@
     lectureWeights: $forwardPassData?.weights ?? {}
   });
 
-  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: attentionType = $currentScene?.config?.attentionType ?? 'self';
+  $: stageConfig = $currentScene?.config?.stage ?? 'residual-1';
+  $: isDecoderStream = stream === 'decoder';
+  $: isDecoderResidual3 = isDecoderStream && (stageConfig === 'residual3' || stageConfig === 'residual-3');
+  $: isCrossAttention = (attentionType === 'cross' || stageConfig === 'residual-2') && !isDecoderResidual3;
+
+  $: activePipeline = isCrossAttention
+    ? interactiveData?.decoder?.crossAttention
+    : (isDecoderStream ? interactiveData?.decoder : interactiveData);
 
   $: precomputedInput1 = $forwardPassData?.stages?.find((s) => s.id === activeInput1StageId)?.tokenVectors ?? [];
   $: precomputedInput2 = $forwardPassData?.stages?.find((s) => s.id === activeInput2StageId)?.tokenVectors ?? [];
   $: precomputedOutput = $forwardPassData?.stages?.find((s) => s.id === activeOutputStageId)?.tokenVectors ?? [];
 
-  // Input 1 calculation (skip connection from input)
+  // Input 1 calculation (skip connection from input/ln1/ln2)
   $: input1 = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedInput1
-    : (activePipeline?.xPe ?? []);
+    : (
+      isDecoderResidual3
+        ? (interactiveData?.decoder?.crossAttention?.ln2_outputs ?? [])
+        : (isCrossAttention ? (interactiveData?.decoder?.ln1_outputs ?? []) : (activePipeline?.xPe ?? []))
+    );
 
-  // Input 2 calculation (sublayer output, e.g. output projection)
+  // Input 2 calculation (sublayer output, e.g. ffn output / cross-attention output projection)
   $: input2 = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedInput2
-    : (activePipeline?.outputProj ?? []);
+    : (
+      isDecoderResidual3
+        ? (interactiveData?.decoder?.ffn?.outputs ?? [])
+        : (activePipeline?.outputProj ?? [])
+    );
 
   // Output calculation (residual sum)
   $: output = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedOutput
-    : (activePipeline?.residual1 ?? addMatrices(input1, input2));
+    : (
+      isDecoderResidual3
+        ? (interactiveData?.decoder?.ffn?.residual3 ?? addMatrices(input1, input2))
+        : (isCrossAttention ? (activePipeline?.residual2 ?? addMatrices(input1, input2)) : (activePipeline?.residual1 ?? addMatrices(input1, input2)))
+    );
 
   // Highlighting synchronization
   let activeHoverIdx = null;

@@ -89,15 +89,24 @@
     lectureWeights: $forwardPassData?.weights ?? {}
   });
 
-  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: attentionType = $currentScene?.config?.attentionType ?? 'self';
+  $: stageConfig = $currentScene?.config?.stage ?? 'layer-norm-1';
+  $: isDecoderStream = stream === 'decoder';
+  $: isDecoderLN3 = isDecoderStream && (stageConfig === 'layernorm3' || stageConfig === 'layer-norm-3');
+  $: isCrossAttention = (attentionType === 'cross' || stageConfig === 'layer-norm-2') && !isDecoderLN3;
+
+  $: activePipeline = isDecoderLN3
+    ? interactiveData?.decoder?.ffn
+    : (isCrossAttention ? interactiveData?.decoder?.crossAttention : (isDecoderStream ? interactiveData?.decoder : interactiveData));
 
   $: precomputedInput = $forwardPassData?.stages?.find((s) => s.id === activeInputStageId)?.tokenVectors ?? [];
   $: precomputedOutput = $forwardPassData?.stages?.find((s) => s.id === activeOutputStageId)?.tokenVectors ?? [];
 
-  // Input representation (Residual Output 1)
+  // Input representation (Residual Output)
   $: inputMatrix = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedInput
-    : (activePipeline?.residual1 ?? []);
+    : (isDecoderLN3 ? (interactiveData?.decoder?.ffn?.residual3 ?? []) : (isCrossAttention ? (interactiveData?.decoder?.crossAttention?.residual2 ?? []) : (interactiveData?.decoder?.residual1 ?? activePipeline?.residual1 ?? [])));
 
   // Computing live Mean and Variance
   $: statistics = (() => {
@@ -121,7 +130,7 @@
   // Output representation
   $: outputMatrix = $dataMode === 'lecture' && !isDecoderStream
     ? precomputedOutput
-    : (activePipeline?.ln1_outputs ?? []);
+    : (isDecoderLN3 ? (interactiveData?.decoder?.ffn?.ln3_outputs ?? []) : (isCrossAttention ? (interactiveData?.decoder?.crossAttention?.ln2_outputs ?? []) : (activePipeline?.ln1_outputs ?? [])));
 
   // Gamma and Beta parameters
   $: gamma = $forwardPassData?.weights?.[activeGammaKey] ?? Array(currentDModel).fill(1.0);

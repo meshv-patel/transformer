@@ -32,34 +32,33 @@
 
   $: stream = $currentScene?.config?.stream ?? 'encoder';
   $: configProj = $currentScene?.config?.proj ?? null;
+  $: attentionType = $currentScene?.config?.attentionType ?? 'self';
   $: isDecoderStream = stream === 'decoder';
+  $: isCrossAttention = attentionType === 'cross';
 
   $: activeRole = role || configProj || (
-    sceneId === 'proj-q' || sceneId === 'dec-proj-q' ? 'q' :
-    sceneId === 'proj-k' || sceneId === 'dec-proj-k' ? 'k' :
-    sceneId === 'proj-v' || sceneId === 'dec-proj-v' ? 'v' :
-    sceneId === 'output-proj' || sceneId === 'dec-output-proj' ? 'o' : 'q'
+    sceneId === 'proj-q' || sceneId === 'dec-proj-q' || sceneId === 'dec-cross-proj-q' ? 'q' :
+    sceneId === 'proj-k' || sceneId === 'dec-proj-k' || sceneId === 'dec-cross-proj-k' ? 'k' :
+    sceneId === 'proj-v' || sceneId === 'dec-proj-v' || sceneId === 'dec-cross-proj-v' ? 'v' :
+    sceneId === 'output-proj' || sceneId === 'dec-output-proj' || sceneId === 'dec-cross-output-proj' ? 'o' : 'q'
   );
 
   $: activeWeightKey = weightKey || (
-    activeRole === 'q' ? (isDecoderStream ? 'Wq_dec' : 'Wq') :
-    activeRole === 'k' ? (isDecoderStream ? 'Wk_dec' : 'Wk') :
-    activeRole === 'v' ? (isDecoderStream ? 'Wv_dec' : 'Wv') :
-    (isDecoderStream ? 'Wo_dec' : 'Wo')
+    activeRole === 'q' ? (isCrossAttention ? 'Wq_cross' : (isDecoderStream ? 'Wq_dec' : 'Wq')) :
+    activeRole === 'k' ? (isCrossAttention ? 'Wk_cross' : (isDecoderStream ? 'Wk_dec' : 'Wk')) :
+    activeRole === 'v' ? (isCrossAttention ? 'Wv_cross' : (isDecoderStream ? 'Wv_dec' : 'Wv')) :
+    (isCrossAttention ? 'Wo_cross' : (isDecoderStream ? 'Wo_dec' : 'Wo'))
   );
 
   $: activeBiasKey = biasKey || (
-    activeRole === 'q' ? (isDecoderStream ? 'bq_dec' : 'bq') :
-    activeRole === 'k' ? (isDecoderStream ? 'bk_dec' : 'bk') :
-    activeRole === 'v' ? (isDecoderStream ? 'bv_dec' : 'bv') :
-    (isDecoderStream ? 'bo_dec' : 'bo')
+    activeRole === 'q' ? (isCrossAttention ? 'bq_cross' : (isDecoderStream ? 'bq_dec' : 'bq')) :
+    activeRole === 'k' ? (isCrossAttention ? 'bk_cross' : (isDecoderStream ? 'bk_dec' : 'bk')) :
+    activeRole === 'v' ? (isCrossAttention ? 'bv_cross' : (isDecoderStream ? 'bv_dec' : 'bv')) :
+    (isCrossAttention ? 'bo_cross' : (isDecoderStream ? 'bo_dec' : 'bo'))
   );
 
   $: activeStageId = stageId || sceneId || 'proj-q';
   $: activeInputStageId = inputStageId || (activeRole === 'o' ? 'weighted-sum' : 'positional-enc');
-
-  // Sub-step index definitions
-  const STEP = { WEIGHTS: 0, MATMUL: 1, SUMMARY: 2, QUIZ: 3 };
 
   const DEFAULT_INTERACTIVE_SENTENCE = ['cat', 'chased', 'dog'];
   const DEFAULT_TARGET_SENTENCE = ['the', 'dog', 'ran'];
@@ -116,11 +115,20 @@
     lectureWeights
   });
 
-  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+  $: activePipeline = isCrossAttention
+    ? interactiveData?.decoder?.crossAttention
+    : (isDecoderStream ? interactiveData?.decoder : interactiveData);
 
   $: activeInputVectors = $dataMode === 'lecture' && !isDecoderStream
     ? (lectureInputStage?.tokenVectors ?? [])
-    : (activeRole === 'o' ? (activePipeline?.concatenatedOutput ?? []) : (activePipeline?.xPe ?? []));
+    : (
+      isCrossAttention
+        ? (activeRole === 'q' ? (interactiveData?.decoder?.ln1_outputs ?? []) :
+           activeRole === 'k' ? (interactiveData?.ln2_outputs ?? []) :
+           activeRole === 'v' ? (interactiveData?.ln2_outputs ?? []) :
+           (activePipeline?.concatenatedOutput ?? []))
+        : (activeRole === 'o' ? (activePipeline?.concatenatedOutput ?? []) : (activePipeline?.xPe ?? []))
+    );
 
   $: activeWeightMatrix = $dataMode === 'lecture' && !isDecoderStream
     ? (lectureWeights[activeWeightKey] ?? [])

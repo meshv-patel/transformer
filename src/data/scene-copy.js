@@ -2674,6 +2674,708 @@ export const SCENE_COPY = {
       misconceptions: ['LayerNorm does not mix information across target tokens.'],
       suggestedQuestions: ['Why is per-token LayerNorm ideal for auto-regressive decoding?']
     }
+  },
+  'dec-cross-proj-q': {
+    eyebrow: 'CROSS ATTENTION: QUERY PROJECTION',
+    title: 'Cross Projection Q (Decoder)',
+    fourQuestions: {
+      q1: 'Where do Cross-Attention Queries come from?',
+      a1: 'From the normalized decoder representations (decoder.ln1_outputs).',
+      q2: 'What is the role of Query vectors in Cross-Attention?',
+      a2: 'They represent what information each target token is looking for in the source sentence.',
+      q3: 'Which weight matrix projects Query vectors?',
+      a3: 'W_q_cross of shape [d_model, d_model].',
+      q4: 'Is Cross-Attention Query computation masked?',
+      a4: 'No, Query vectors are projected per token independently.'
+    },
+    body: {
+      beginner: 'The decoder projects its target tokens into Query vectors to ask the encoder questions.',
+      mtech: 'Q_cross = X_dec_ln1 * W_q_cross produces Query vectors of shape [target_seq_len, d_model].',
+      research: 'Cross-attention queries act as contextual probes into the encoder representations.'
+    },
+    deepDive: { title: 'Asymmetric Attention Roles', content: 'Cross-attention uses queries from the decoder stream and keys/values from the encoder stream.' },
+    whyPanel: { summary: 'Projecting queries allows target tokens to query source tokens in a learned subspace.' },
+    beforeAfter: { before: 'Decoder LN1 representation', after: 'Cross Query matrix Q_cross' },
+    quickCheck: {
+      question: 'Which tensor is projected to produce Cross-Attention Queries?',
+      options: ['decoder.ln1_outputs', 'encoder.ln2_outputs', 'decoder.xPe', 'encoder.embeddings'],
+      correctIndex: 0,
+      explanation: 'Cross-attention queries are projected from decoder.ln1_outputs.',
+      distractorNotes: { 1: 'Incorrect. encoder.ln2_outputs provides Keys and Values.', 2: 'Incorrect. decoder.xPe is input before self-attention.', 3: 'Incorrect. Encoder embeddings are un-contextualized.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-proj-q', code: 'Q_cross = self.W_q_cross(dec_ln1)' }],
+    equationTerms: [{ id: 'eq-dec-cross-proj-q', tex: 'Q_{\\text{cross}} = X_{\\text{dec\\_ln1}} W_{q,\\text{cross}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-proj-q', equationTermId: 'eq-dec-cross-proj-q', codeLineId: 'code-dec-cross-proj-q' }],
+    narration: [{ duration: '~30s', objective: 'Explain Cross-Attention Query projection.', script: 'We project normalized decoder tokens into Query space using W_q_cross.', audienceQuestion: 'Where do these queries come from?', expectedAnswer: 'From decoder.ln1_outputs.', misconception: 'Clarify that queries come from decoder, not encoder.', transition: 'Now let\'s project Encoder Keys.' }],
+    speakerNotes: { teachingTips: ['Emphasize that queries originate in the decoder.'], misconceptions: ['Keys and Queries do not come from the same sequence in cross attention.'], suggestedQuestions: ['Why do queries come from the decoder?'] }
+  },
+  'dec-cross-proj-k': {
+    eyebrow: 'CROSS ATTENTION: KEY PROJECTION',
+    title: 'Cross Projection K (Encoder)',
+    fourQuestions: {
+      q1: 'Where do Cross-Attention Keys come from?',
+      a1: 'From the final contextual output of the Encoder (encoder.ln2_outputs).',
+      q2: 'What do Key vectors represent?',
+      a2: 'They index source token features for matching against decoder queries.',
+      q3: 'Which weight matrix is used?',
+      a3: 'W_k_cross of shape [d_model, d_model].',
+      q4: 'Do Keys change as target tokens are generated?',
+      a4: 'No, encoder keys remain constant throughout sequence generation.'
+    },
+    body: {
+      beginner: 'The encoder output is projected into Key vectors so the decoder can search source words.',
+      mtech: 'K_cross = X_enc_ln2 * W_k_cross yields Key vectors of shape [source_seq_len, d_model].',
+      research: 'Encoder key caching avoids redundant key projections during auto-regressive decoding.'
+    },
+    deepDive: { title: 'Static Encoder Key Caching', content: 'Because encoder outputs are fixed for a source sentence, K_cross can be computed once and reused for all decoding steps.' },
+    whyPanel: { summary: 'Key projections map source token representations into the cross-attention matching space.' },
+    beforeAfter: { before: 'Encoder LN2 output', after: 'Cross Key matrix K_cross' },
+    quickCheck: {
+      question: 'Where do Cross-Attention Keys originate?',
+      options: ['encoder.ln2_outputs', 'decoder.ln1_outputs', 'decoder.xPe', 'decoder.Q'],
+      correctIndex: 0,
+      explanation: 'Keys in cross-attention come from encoder.ln2_outputs.',
+      distractorNotes: { 1: 'Incorrect. decoder.ln1_outputs provides Queries.', 2: 'Incorrect. decoder.xPe is decoder input.', 3: 'Incorrect. decoder.Q is self-attention query.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-proj-k', code: 'K_cross = self.W_k_cross(enc_ln2)' }],
+    equationTerms: [{ id: 'eq-dec-cross-proj-k', tex: 'K_{\\text{cross}} = X_{\\text{enc\\_ln2}} W_{k,\\text{cross}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-proj-k', equationTermId: 'eq-dec-cross-proj-k', codeLineId: 'code-dec-cross-proj-k' }],
+    narration: [{ duration: '~30s', objective: 'Explain Cross-Attention Key projection.', script: 'We project the final encoder representations into Key vectors using W_k_cross.', audienceQuestion: 'Are these keys recomputed for every target token?', expectedAnswer: 'No, encoder keys can be cached.', misconception: 'Remind students that source keys come from the encoder.', transition: 'Next, let\'s project Encoder Values.' }],
+    speakerNotes: { teachingTips: ['Point out key caching optimizations during inference.'], misconceptions: ['Keys do not come from target tokens.'], suggestedQuestions: ['Why can encoder keys be cached?'] }
+  },
+  'dec-cross-proj-v': {
+    eyebrow: 'CROSS ATTENTION: VALUE PROJECTION',
+    title: 'Cross Projection V (Encoder)',
+    fourQuestions: {
+      q1: 'Where do Cross-Attention Values come from?',
+      a1: 'From the final contextual output of the Encoder (encoder.ln2_outputs).',
+      q2: 'What do Value vectors contain?',
+      a2: 'The source information that will be retrieved and blended into decoder tokens.',
+      q3: 'Which weight matrix projects Value vectors?',
+      a3: 'W_v_cross of shape [d_model, d_model].',
+      q4: 'Can Value vectors also be cached?',
+      a4: 'Yes, like Keys, Value vectors remain constant for a given source sentence.'
+    },
+    body: {
+      beginner: 'Value vectors hold the actual information that the decoder extracts from the source sentence.',
+      mtech: 'V_cross = X_enc_ln2 * W_v_cross of shape [source_seq_len, d_model].',
+      research: 'Value representations encode deep contextualized source features for translation transfer.'
+    },
+    deepDive: { title: 'Value Vector Caching', content: 'Caching V_cross prevents re-running encoder projections during auto-regressive token generation.' },
+    whyPanel: { summary: 'Value projections prepare source content vectors for weighted blending.' },
+    beforeAfter: { before: 'Encoder LN2 output', after: 'Cross Value matrix V_cross' },
+    quickCheck: {
+      question: 'Which tensor is projected to produce Cross-Attention Values?',
+      options: ['encoder.ln2_outputs', 'decoder.ln1_outputs', 'decoder.scores', 'decoder.residual1'],
+      correctIndex: 0,
+      explanation: 'Cross-attention values are projected from encoder.ln2_outputs.',
+      distractorNotes: { 1: 'Incorrect. decoder.ln1_outputs provides Queries.', 2: 'Incorrect. Scores are intermediate matrices.', 3: 'Incorrect. Residual1 is decoder state.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-proj-v', code: 'V_cross = self.W_v_cross(enc_ln2)' }],
+    equationTerms: [{ id: 'eq-dec-cross-proj-v', tex: 'V_{\\text{cross}} = X_{\\text{enc\\_ln2}} W_{v,\\text{cross}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-proj-v', equationTermId: 'eq-dec-cross-proj-v', codeLineId: 'code-dec-cross-proj-v' }],
+    narration: [{ duration: '~30s', objective: 'Explain Cross-Attention Value projection.', script: 'We project the encoder output into Value vectors V_cross.', audienceQuestion: 'Do Values come from the encoder or decoder?', expectedAnswer: 'From the encoder.', misconception: 'Confirm that Values represent source sentence content.', transition: 'Now let\'s split all three projections into heads.' }],
+    speakerNotes: { teachingTips: ['Emphasize that Q comes from decoder, K and V come from encoder.'], misconceptions: ['Values are source vectors, not target vectors.'], suggestedQuestions: ['How do Value vectors transfer source content to target tokens?'] }
+  },
+  'dec-cross-split-heads': {
+    eyebrow: 'CROSS ATTENTION: HEAD SPLITTING',
+    title: 'Cross Split Heads',
+    fourQuestions: {
+      q1: 'How are Cross-Attention heads split?',
+      a1: 'Q_cross [L_dec, d_model] is split into [h, L_dec, d_k], while K_cross and V_cross [L_enc, d_model] are split into [h, L_enc, d_k].',
+      q2: 'Why can source and target sequence lengths differ?',
+      a2: 'Because matrix multiplication [L_dec, d_k] x [d_k, L_enc] produces a grid of shape [L_dec, L_enc].',
+      q3: 'What is d_k?',
+      a3: 'd_model / num_heads.',
+      q4: 'Does head splitting alter tensor values?',
+      a4: 'No, it reshapes and transposes dimensions for parallel multi-head attention.'
+    },
+    body: { beginner: 'We divide the Query, Key, and Value matrices into multiple attention heads.', mtech: 'Reshapes Q_cross to [h, L_dec, d_k] and K_cross, V_cross to [h, L_enc, d_k].', research: 'Multi-head cross-attention allows simultaneous alignment to multiple source concepts.' },
+    deepDive: { title: 'Asymmetric Sequence Grid Dimensions', content: 'Cross-attention matrices have rows equal to target sequence length and columns equal to source sequence length.' },
+    whyPanel: { summary: 'Splitting heads enables diverse cross-attention pathways across different representation subspaces.' },
+    beforeAfter: { before: 'Combined projection matrices', after: 'Split head tensors Q_h, K_h, V_h' },
+    quickCheck: {
+      question: 'What is the shape of a split Cross Key head K_h?',
+      options: ['[source_seq_len, d_k]', '[target_seq_len, d_k]', '[d_model, d_model]', '[source_seq_len, target_seq_len]'],
+      correctIndex: 0,
+      explanation: 'Key heads have shape [source_seq_len, d_k].',
+      distractorNotes: { 1: 'Incorrect. Query heads have shape [target_seq_len, d_k].', 2: 'Incorrect. d_model is the un-split dimension.', 3: 'Incorrect. Scores have shape [target_seq_len, source_seq_len].' }
+    },
+    pytorch: [{ id: 'code-dec-cross-split-heads', code: 'Q_h = split_heads(Q_cross, num_heads)' }],
+    equationTerms: [{ id: 'eq-dec-cross-split-heads', tex: 'Q_h \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_k}, K_h \\in \\mathbb{R}^{L_{\\text{enc}} \\times d_k}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-split-heads', equationTermId: 'eq-dec-cross-split-heads', codeLineId: 'code-dec-cross-split-heads' }],
+    narration: [{ duration: '~30s', objective: 'Explain cross-attention head splitting.', script: 'We split Q_cross, K_cross, and V_cross into multiple heads.', audienceQuestion: 'Why can source and target lengths differ?', expectedAnswer: 'Because Q_h and K_h contract over d_k.', misconception: 'Show that sequence lengths L_dec and L_enc do not have to be equal.', transition: 'Next, we compute raw cross-attention scores.' }],
+    speakerNotes: { teachingTips: ['Stress that L_dec and L_enc can be completely different lengths.'], misconceptions: ['Head splitting does not change numerical values, only tensor shapes.'], suggestedQuestions: ['What determines the dimensions of the cross-attention score grid?'] }
+  },
+  'dec-cross-qk-matmul': {
+    eyebrow: 'CROSS ATTENTION: RAW SCORES',
+    title: 'Cross Q × Kᵀ (Raw Scores)',
+    fourQuestions: {
+      q1: 'How are raw cross-attention scores computed?',
+      a1: 'S = (Q_h * K_h^T) / sqrt(d_k) of shape [target_seq_len, source_seq_len].',
+      q2: 'What does score S[i][j] represent?',
+      a2: 'The raw alignment strength between target token i and source token j.',
+      q3: 'Is causal masking applied to cross-attention?',
+      a3: 'No! Cross-attention is unmasked; every target token can attend to all source tokens.',
+      q4: 'Why is causal masking absent here?',
+      a4: 'Because the entire source sentence is already fully known and encoded.',
+    },
+    body: { beginner: 'We compute dot products between target queries and source keys to find which source words match each target word.', mtech: 'S_cross = (Q_cross * K_cross^T) / sqrt(d_k) resulting in grid of shape [L_dec, L_enc].', research: 'Unmasked cross-attention provides complete bidirectional access to the encoded source context.' },
+    deepDive: { title: 'Unmasked Cross-Attention Matrix', content: 'Unlike masked self-attention, cross-attention matrix has no lower-triangular restrictions because source context is fully available.' },
+    whyPanel: { summary: 'Raw cross-scores measure semantic affinity between target queries and source keys.' },
+    beforeAfter: { before: 'Split Q_h and K_h heads', after: 'Raw score matrix S of shape [L_dec, L_enc]' },
+    quickCheck: {
+      question: 'Is causal masking applied during Cross-Attention?',
+      options: ['No, all source tokens are accessible.', 'Yes, future source tokens are masked.', 'Only during training.', 'Only for the first head.'],
+      correctIndex: 0,
+      explanation: 'Cross-attention is unmasked because the entire source sentence is available to the decoder.',
+      distractorNotes: { 1: 'Incorrect. Source tokens are not auto-regressively masked.', 2: 'Incorrect. Unmasked in both training and inference.', 3: 'Incorrect. Unmasked across all heads.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-qk-matmul', code: 'scores = torch.matmul(Q_h, K_h.transpose(-2, -1)) / math.sqrt(d_k)' }],
+    equationTerms: [{ id: 'eq-dec-cross-qk-matmul', tex: 'S_{\\text{cross}} = \\frac{Q_h K_h^T}{\\sqrt{d_k}} \\in \\mathbb{R}^{L_{\\text{dec}} \\times L_{\\text{enc}}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-qk-matmul', equationTermId: 'eq-dec-cross-qk-matmul', codeLineId: 'code-dec-cross-qk-matmul' }],
+    narration: [{ duration: '~35s', objective: 'Explain raw cross-attention score computation.', script: 'We multiply Q_h by K_h transposed to get raw alignment scores between target and source words.', audienceQuestion: 'Why is there no causal mask here?', expectedAnswer: 'Because the entire source sentence is already encoded.', misconception: 'Make sure students notice that rows are target tokens and columns are source tokens.', transition: 'Next, we apply Softmax to convert scores into attention weights.' }],
+    speakerNotes: { teachingTips: ['Highlight that rows = target tokens and columns = source tokens.'], misconceptions: ['Cross-attention does NOT use causal masking.'], suggestedQuestions: ['Why does cross-attention allow full access to all source tokens?'] }
+  },
+  'dec-cross-scale-softmax': {
+    eyebrow: 'CROSS ATTENTION: SOFTMAX WEIGHTS',
+    title: 'Cross Softmax Weights',
+    fourQuestions: {
+      q1: 'How are cross-attention weights normalized?',
+      a1: 'Softmax is applied across columns for each target token row: A[i] = softmax(S[i]).',
+      q2: 'What is the sum of weights in each row?',
+      a2: 'Exactly 1.0.',
+      q3: 'What does weight A[i][j] represent?',
+      a3: 'The percentage of attention target token i pays to source token j.',
+      q4: 'What shape does the weight matrix have?',
+      a4: '[target_seq_len, source_seq_len].'
+    },
+    body: { beginner: 'Softmax turns raw alignment scores into probability percentages that sum to 100% for each target word.', mtech: 'A_cross = softmax(S_cross, dim=-1) produces probability distribution over source sequence tokens.', research: 'Cross-attention weights visualize word alignment maps between target and source languages.' },
+    deepDive: { title: 'Neural Machine Translation Alignment Maps', content: 'Visualizing A_cross reveals learned word-level and phrase-level translation alignments.' },
+    whyPanel: { summary: 'Softmax normalization creates a valid probability distribution over source token features.' },
+    beforeAfter: { before: 'Raw score matrix S', after: 'Normalized probability matrix A' },
+    quickCheck: {
+      question: 'What is the sum of attention weights in each row of A_cross?',
+      options: ['1.0', '0.0', 'd_model', 'num_heads'],
+      correctIndex: 0,
+      explanation: 'Softmax normalizes each row so the weights sum to 1.0.',
+      distractorNotes: { 1: 'Incorrect. Sum is 1.0, not 0.', 2: 'Incorrect. d_model is feature dimension.', 3: 'Incorrect. num_heads is number of heads.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-scale-softmax', code: 'weights = F.softmax(scores, dim=-1)' }],
+    equationTerms: [{ id: 'eq-dec-cross-scale-softmax', tex: 'A_{\\text{cross}} = \\text{softmax}(S_{\\text{cross}})' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-scale-softmax', equationTermId: 'eq-dec-cross-scale-softmax', codeLineId: 'code-dec-cross-scale-softmax' }],
+    narration: [{ duration: '~30s', objective: 'Explain cross-attention Softmax weights.', script: 'Softmax converts raw alignment scores into probability weights that sum to 1.0 for each target word.', audienceQuestion: 'What does a high weight mean?', expectedAnswer: 'The target word strongly focuses on that source word.', misconception: 'Confirm that each row sums to 1.0 independently.', transition: 'Now we use these weights to blend source Value vectors.' }],
+    speakerNotes: { teachingTips: ['Show how cross-attention weights act as soft alignment matrices in translation.'], misconceptions: ['Each row sums to 1.0 across source columns.'], suggestedQuestions: ['How do cross-attention heatmaps relate to traditional alignment tables?'] }
+  },
+  'dec-cross-weighted-sum': {
+    eyebrow: 'CROSS ATTENTION: WEIGHTED SUM',
+    title: 'Cross Weighted Sum',
+    fourQuestions: {
+      q1: 'How are source Values blended for each target token?',
+      a1: 'O_h = A_cross * V_h_cross of shape [target_seq_len, d_k].',
+      q2: 'Where do the Value vectors V_h come from?',
+      a2: 'From the encoder output (encoder.ln2_outputs).',
+      q3: 'What does the resulting vector contain?',
+      a3: 'A weighted combination of source token features relevant to each target token.',
+      q4: 'What is the output shape for each head?',
+      a4: '[target_seq_len, d_k].'
+    },
+    body: { beginner: 'We use the attention probabilities to multiply and sum source Value vectors into contextual source representations.', mtech: 'O_h = matmul(A_cross, V_cross_h) blends encoder value vectors into target token positions.', research: 'Cross-attention weighted sums inject source context directly into the target decoding stream.' },
+    deepDive: { title: 'Information Transfer from Source to Target', content: 'The weighted sum contracts the source sequence dimension, producing target-aligned source features.' },
+    whyPanel: { summary: 'Weighted summation pulls relevant source content into each target token position.' },
+    beforeAfter: { before: 'Attention weights A and Encoder Values V', after: 'Blended head output O_h' },
+    quickCheck: {
+      question: 'Which vectors are multiplied by cross-attention weights A_cross?',
+      options: ['Encoder Value vectors (V_cross)', 'Decoder Query vectors (Q_cross)', 'Decoder Key vectors', 'Positional encodings'],
+      correctIndex: 0,
+      explanation: 'Cross-attention weights multiply Encoder Value vectors V_cross.',
+      distractorNotes: { 1: 'Incorrect. Queries are used to compute scores.', 2: 'Incorrect. Decoder keys belong to self-attention.', 3: 'Incorrect. Positional encodings are added earlier.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-weighted-sum', code: 'head_out = torch.matmul(weights, V_cross_h)' }],
+    equationTerms: [{ id: 'eq-dec-cross-weighted-sum', tex: 'O_h = A_{\\text{cross}} V_{h,\\text{cross}} \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_k}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-weighted-sum', equationTermId: 'eq-dec-cross-weighted-sum', codeLineId: 'code-dec-cross-weighted-sum' }],
+    narration: [{ duration: '~35s', objective: 'Explain cross-attention weighted summation.', script: 'We multiply cross-attention weights by Encoder Value vectors to extract source context for each target word.', audienceQuestion: 'Where do the Value vectors come from?', expectedAnswer: 'From the encoder.', misconception: 'Reinforce that source values are being blended into target positions.', transition: 'Let\'s inspect all cross-attention heads simultaneously.' }],
+    speakerNotes: { teachingTips: ['Show how source information flows into target vectors via weighted averaging.'], misconceptions: ['Value vectors come from the encoder, not the decoder.'], suggestedQuestions: ['Why are source values blended rather than copied directly?'] }
+  },
+  'dec-cross-heads-compare': {
+    eyebrow: 'CROSS ATTENTION: HEAD COMPARISON',
+    title: 'Cross Attention Heads',
+    fourQuestions: {
+      q1: 'Why do we use multiple cross-attention heads?',
+      a1: 'Different heads learn different alignment relationships (e.g., noun-noun, verb-object, syntactic structure).',
+      q2: 'Are all cross-attention head heatmaps identical?',
+      a2: 'No, each head focuses on different source tokens for the same target token.',
+      q3: 'How many heads are active?',
+      a3: 'num_heads (typically 4 or 8).',
+      q4: 'What shape does each head heatmap have?',
+      a4: '[target_seq_len, source_seq_len].'
+    },
+    body: { beginner: 'Comparing cross-attention heads shows how different heads focus on different parts of the source sentence.', mtech: 'Multi-head cross-attention provides multiple parallel alignment distributions over source tokens.', research: 'Analysis of cross-attention heads reveals specialized linguistic and syntactic translators.' },
+    deepDive: { title: 'Head Specialization in Cross Attention', content: 'Some heads perform strict 1-to-1 word translations while others capture multi-word phrase alignments.' },
+    whyPanel: { summary: 'Parallel heads capture diverse source-target alignment patterns.' },
+    beforeAfter: { before: 'Single head view', after: 'Side-by-side comparison of all cross-attention heads' },
+    quickCheck: {
+      question: 'What do different cross-attention heads learn?',
+      options: ['Different alignment patterns between target and source tokens.', 'Identical duplicate matrices.', 'Random noise.', 'Only punctuation alignment.'],
+      correctIndex: 0,
+      explanation: 'Multi-head cross-attention allows different heads to learn distinct alignment patterns.',
+      distractorNotes: { 1: 'Incorrect. Heads specialize in different relationships.', 2: 'Incorrect. Learned weights differ across heads.', 3: 'Incorrect. Punctuation is only one aspect.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-heads-compare', code: '# Compare attention weights across all heads' }],
+    equationTerms: [{ id: 'eq-dec-cross-heads-compare', tex: 'A^{(h)} = \\text{softmax}\\left(\\frac{Q^{(h)} K^{(h)T}}{\\sqrt{d_k}}\\right)' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-heads-compare', equationTermId: 'eq-dec-cross-heads-compare', codeLineId: 'code-dec-cross-heads-compare' }],
+    narration: [{ duration: '~30s', objective: 'Compare all cross-attention heads.', script: 'Observe how each cross-attention head attends to different source words for the same target sentence.', audienceQuestion: 'Do all heads focus on the same source words?', expectedAnswer: 'No, different heads specialize in different relationships.', misconception: 'Highlight head diversity.', transition: 'Now we concatenate all head outputs.' }],
+    speakerNotes: { teachingTips: ['Compare heatmaps across heads to demonstrate functional specialization.'], misconceptions: ['Heads are not redundant.'], suggestedQuestions: ['How does multi-head cross-attention improve translation accuracy?'] }
+  },
+  'dec-cross-concat': {
+    eyebrow: 'CROSS ATTENTION: CONCATENATION',
+    title: 'Cross Concatenation',
+    fourQuestions: {
+      q1: 'How are cross-attention head outputs concatenated?',
+      a1: 'The num_heads vectors of size d_k are stitched side-by-side into a vector of size d_model.',
+      q2: 'What is the resulting tensor shape?',
+      a2: '[target_seq_len, d_model].',
+      q3: 'Does concatenation change numerical values?',
+      a3: 'No, it combines head columns along the d_model dimension.',
+      q4: 'Why do we concatenate before output projection?',
+      a4: 'To merge feature channels from all heads into a unified vector for Wo_cross projection.'
+    },
+    body: { beginner: 'We stitch the output vectors from all cross-attention heads back together side-by-side.', mtech: 'Concat(O_1, ..., O_h) recombines split heads into shape [L_dec, d_model].', research: 'Concatenation restores the model dimension d_model prior to linear mixing.' },
+    deepDive: { title: 'Head Recombination', content: 'Concatenation joins all head features back into a single [L_dec, d_model] matrix.' },
+    whyPanel: { summary: 'Concatenation merges multi-head cross-attention features into a unified matrix.' },
+    beforeAfter: { before: 'Split head outputs O_1..O_h', after: 'Concatenated matrix [L_dec, d_model]' },
+    quickCheck: {
+      question: 'What is the tensor shape after cross-attention concatenation?',
+      options: ['[target_seq_len, d_model]', '[source_seq_len, d_model]', '[num_heads, d_k]', '[d_model, d_model]'],
+      correctIndex: 0,
+      explanation: 'Concatenating num_heads vectors of size d_k yields shape [target_seq_len, d_model].',
+      distractorNotes: { 1: 'Incorrect. Rows correspond to target sequence length.', 2: 'Incorrect. Un-split shape is d_model.', 3: 'Incorrect. Weight matrix shape.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-concat', code: 'concat_out = torch.cat(head_outputs, dim=-1)' }],
+    equationTerms: [{ id: 'eq-dec-cross-concat', tex: '\\text{Concat}(O_1, \\dots, O_h) \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_{\\text{model}}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-concat', equationTermId: 'eq-dec-cross-concat', codeLineId: 'code-dec-cross-concat' }],
+    narration: [{ duration: '~30s', objective: 'Explain cross-attention concatenation.', script: 'We concatenate the outputs of all cross-attention heads side-by-side.', audienceQuestion: 'What is the shape after concatenation?', expectedAnswer: 'Target sequence length by d_model.', misconception: 'Show that head outputs are concatenated along columns.', transition: 'Now we apply the final cross-attention output projection Wo_cross.' }],
+    speakerNotes: { teachingTips: ['Demonstrate how column sections from each head form the full d_model vector.'], misconceptions: ['Concatenation does not add values together; it joins them along the column dimension.'], suggestedQuestions: ['Why is concatenation necessary before output projection?'] }
+  },
+  'dec-cross-output-proj': {
+    eyebrow: 'CROSS ATTENTION: OUTPUT PROJECTION',
+    title: 'Cross Output Projection',
+    fourQuestions: {
+      q1: 'Which weight matrix projects concatenated cross-attention outputs?',
+      a1: 'Wo_cross of shape [d_model, d_model].',
+      q2: 'What is the goal of Wo_cross?',
+      a2: 'To linearly mix features extracted from all cross-attention heads.',
+      q3: 'What is the output tensor shape?',
+      a3: '[target_seq_len, d_model].',
+      q4: 'Is bias bo_cross added?',
+      a4: 'Yes, element-wise bias bo_cross is added after matrix multiplication.'
+    },
+    body: { beginner: 'The output projection matrix Wo_cross mixes the features from all cross-attention heads together.', mtech: 'OutputProj_cross = Concat * Wo_cross + bo_cross of shape [L_dec, d_model].', research: 'Wo_cross projects multi-head cross-attention features into the decoder residual stream space.' },
+    deepDive: { title: 'Cross Subspace Blending', content: 'Wo_cross allows inter-head feature interactions before adding to the decoder residual stream.' },
+    whyPanel: { summary: 'Output projection maps multi-head cross-attention outputs back into the residual stream space.' },
+    beforeAfter: { before: 'Concatenated head matrix', after: 'Projected cross-attention output' },
+    quickCheck: {
+      question: 'What is the role of Wo_cross in Cross-Attention?',
+      options: ['To mix features from all cross-attention heads.', 'To normalize token vectors.', 'To calculate Softmax probabilities.', 'To mask future tokens.'],
+      correctIndex: 0,
+      explanation: 'Wo_cross projects and mixes features from all cross-attention heads.',
+      distractorNotes: { 1: 'Incorrect. LayerNorm normalizes vectors.', 2: 'Incorrect. Softmax calculates probabilities.', 3: 'Incorrect. Causal mask applies to self-attention.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-output-proj', code: 'cross_out = self.Wo_cross(concat_out)' }],
+    equationTerms: [{ id: 'eq-dec-cross-output-proj', tex: '\\text{OutputProj}_{\\text{cross}} = \\text{Concat} \\cdot W_{o,\\text{cross}} + b_{o,\\text{cross}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-output-proj', equationTermId: 'eq-dec-cross-output-proj', codeLineId: 'code-dec-cross-output-proj' }],
+    narration: [{ duration: '~30s', objective: 'Explain cross-attention output projection.', script: 'We multiply concatenated head outputs by Wo_cross to mix features across heads.', audienceQuestion: 'What dimension does Wo_cross have?', expectedAnswer: 'd_model by d_model.', misconception: 'Confirm that Wo_cross maps features back to d_model.', transition: 'Next, we add this output to the second decoder residual connection.' }],
+    speakerNotes: { teachingTips: ['Explain that Wo_cross mixes information across all head channels.'], misconceptions: ['Wo_cross is separate from self-attention Wo.'], suggestedQuestions: ['Why does multi-head attention need an output projection?'] }
+  },
+  'dec-cross-residual-2': {
+    eyebrow: 'DECODER OPERATOR 5: SKIP CONNECTION 2',
+    title: 'Decoder Residual Connection ②',
+    fourQuestions: {
+      q1: 'What two inputs are added in Decoder Residual Connection ②?',
+      a1: 'decoder.ln1_outputs (input to cross-attention) and decoder.crossAttention.outputProj (output of cross-attention).',
+      q2: 'What is the tensor shape?',
+      a2: '[target_seq_len, d_model].',
+      q3: 'Why is this residual connection crucial?',
+      a3: 'It allows target token features from self-attention to flow around cross-attention into subsequent decoder sublayers.',
+      q4: 'Does addition change tensor dimensions?',
+      a4: 'No, element-wise addition preserves shape [L_dec, d_model].'
+    },
+    body: { beginner: 'The second residual connection adds the self-attention output back to the cross-attention output.', mtech: 'residual2 = decoder.ln1_outputs + crossAttention.outputProj.', research: 'Residual stream ② accumulates cross-attention source context on top of self-attention target context.' },
+    deepDive: { title: 'Dual Residual Streams in Transformer Decoders', content: 'Decoder blocks feature two residual connections: Residual ① around Self-Attention and Residual ② around Cross-Attention.' },
+    whyPanel: { summary: 'Residual Connection ② preserves decoder self-attention features alongside cross-attention source updates.' },
+    beforeAfter: { before: 'Decoder LN1 state & Cross Output', after: 'Summed Residual ② representation' },
+    quickCheck: {
+      question: 'What is the input to the second decoder residual skip connection?',
+      options: ['decoder.ln1_outputs', 'decoder.xPe', 'encoder.ln2_outputs', 'decoder.embeds'],
+      correctIndex: 0,
+      explanation: 'The skip connection for Residual ② comes from decoder.ln1_outputs.',
+      distractorNotes: { 1: 'Incorrect. decoder.xPe is skip connection for Residual ①.', 2: 'Incorrect. encoder.ln2_outputs is encoder output.', 3: 'Incorrect. decoder.embeds is unencoded input.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-residual-2', code: 'x = x + self.cross_attn(x, enc_out)' }],
+    equationTerms: [{ id: 'eq-dec-cross-residual-2', tex: 'X_{\\text{res2}} = X_{\\text{dec\\_ln1}} + \\text{OutputProj}_{\\text{cross}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-residual-2', equationTermId: 'eq-dec-cross-residual-2', codeLineId: 'code-dec-cross-residual-2' }],
+    narration: [{ duration: '~30s', objective: 'Explain Decoder Residual Connection ②.', script: 'We add decoder.ln1_outputs back to the cross-attention output projection.', audienceQuestion: 'Where does the skip path come from?', expectedAnswer: 'From decoder.ln1_outputs.', misconception: 'Confirm that both branches have shape [L_dec, d_model].', transition: 'Finally, we normalize with Layer Normalization ②.' }],
+    speakerNotes: { teachingTips: ['Trace the two residual paths in a decoder block: Residual 1 (self-attn) and Residual 2 (cross-attn).'], misconceptions: ['Residual 2 uses decoder.ln1_outputs as its skip input, not decoder.xPe.'], suggestedQuestions: ['How do the two residual connections work together in a decoder block?'] }
+  },
+  'dec-cross-layernorm-2': {
+    eyebrow: 'DECODER OPERATOR 6: NORMALIZATION 2',
+    title: 'Decoder Layer Normalization ②',
+    fourQuestions: {
+      q1: 'What is normalized in Decoder Layer Normalization ②?',
+      a1: 'The sum from Residual Connection ② (decoder.crossAttention.residual2).',
+      q2: 'What are the target statistics before affine scaling?',
+      a2: 'Mean = 0.0, Variance = 1.0 for each target token row.',
+      q3: 'Which parameters perform affine scaling?',
+      a3: 'ln2_gamma_dec and ln2_beta_dec of shape [d_model].',
+      q4: 'What is the final output shape?',
+      a4: '[target_seq_len, d_model].'
+    },
+    body: { beginner: 'Layer Normalization ② standardizes target token representations after cross-attention.', mtech: 'ln2_outputs = LayerNorm(residual2) of shape [L_dec, d_model].', research: 'LN2 prepares combined self-attention and cross-attention representations for the Feed Forward Network.' },
+    deepDive: { title: 'Decoder Sublayer Normalization Invariants', content: 'LN2 ensures stable activation scaling before vectors enter the Decoder Feed Forward Network.' },
+    whyPanel: { summary: 'Layer Normalization ② stabilizes cross-attention augmented representations.' },
+    beforeAfter: { before: 'Unnormalized Residual ② sum', after: 'Normalized & scaled LN2 output' },
+    quickCheck: {
+      question: 'What is the output shape of Decoder Layer Normalization ②?',
+      options: ['[target_seq_len, d_model]', '[source_seq_len, d_model]', '[num_heads, d_k]', '[d_model, d_model]'],
+      correctIndex: 0,
+      explanation: 'Decoder LayerNorm ② outputs shape [target_seq_len, d_model].',
+      distractorNotes: { 1: 'Incorrect. Source sequence length belongs to encoder.', 2: 'Incorrect. Head shape.', 3: 'Incorrect. Weight matrix shape.' }
+    },
+    pytorch: [{ id: 'code-dec-cross-layernorm-2', code: 'x = self.norm2(x)' }],
+    equationTerms: [{ id: 'eq-dec-cross-layernorm-2', tex: '\\text{LN}_2(x) = \\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} \\cdot \\gamma + \\beta' }],
+    syncMap: [{ vizElementId: 'viz-dec-cross-layernorm-2', equationTermId: 'eq-dec-cross-layernorm-2', codeLineId: 'code-dec-cross-layernorm-2' }],
+    narration: [{ duration: '~30s', objective: 'Explain Decoder Layer Normalization ②.', script: 'We normalize Residual ② outputs across d_model columns to mean 0 and variance 1.', audienceQuestion: 'What sublayer follows LN2 in the decoder?', expectedAnswer: 'The Decoder Feed Forward Network.', misconception: 'Confirm that LN2 outputs are ready for FFN processing.', transition: 'Stage 4 Decoder Cross-Attention is now complete!' }],
+    speakerNotes: { teachingTips: ['Summarize the entire Cross-Attention sublayer block.'], misconceptions: ['LN2 operates per token row.'], suggestedQuestions: ['Why is LN2 applied before the Feed Forward Network?'] }
+  },
+  'dec-ffn': {
+    eyebrow: 'DECODER OPERATOR 7: FEED FORWARD NETWORK',
+    title: 'Decoder Feed Forward Network',
+    fourQuestions: {
+      q1: 'What input enters the Decoder Feed Forward Network?',
+      a1: 'The normalized cross-attention output (decoder.crossAttention.ln2_outputs).',
+      q2: 'What operations make up the Decoder FFN?',
+      a2: 'Linear expansion (W1_dec to d_ff), non-linear activation (ReLU), and Linear projection (W2_dec back to d_model).',
+      q3: 'Why do we expand features to d_ff?',
+      a3: 'To process and transform token representations in a higher-dimensional feature space.',
+      q4: 'Is the FFN applied per token independently?',
+      a4: 'Yes, the FFN operates position-wise across each target token identically.'
+    },
+    body: { beginner: 'The Position-wise Feed Forward Network transforms each target token vector independently through two linear layers and a non-linear activation.', mtech: 'FFN(x) = max(0, x W1_dec + b1_dec) W2_dec + b2_dec of shape [target_seq_len, d_model].', research: 'The FFN sublayer acts as key-value memory storing factual and linguistic knowledge in transformer decoders.' },
+    deepDive: { title: 'Position-wise Token Transformations', content: 'Each target token is processed by the exact same FFN weights, allowing independent per-token feature refinement.' },
+    whyPanel: { summary: 'The FFN applies non-linear transformations to store and retrieve contextual features.' },
+    beforeAfter: { before: 'Decoder LN2 output matrix [L_dec, d_model]', after: 'FFN processed output matrix [L_dec, d_model]' },
+    quickCheck: {
+      question: 'What is the expansion dimension d_ff in the Decoder Feed Forward Network?',
+      options: ['2 * d_model', 'd_model', 'num_heads', 'd_k'],
+      correctIndex: 0,
+      explanation: 'In this implementation, d_ff is set to 2 * d_model.',
+      distractorNotes: { 1: 'Incorrect. d_model is un-expanded dimension.', 2: 'Incorrect. num_heads is number of attention heads.', 3: 'Incorrect. d_k is head size.' }
+    },
+    pytorch: [{ id: 'code-dec-ffn', code: 'ffn_out = self.w_2(F.relu(self.w_1(dec_ln2)))' }],
+    equationTerms: [{ id: 'eq-dec-ffn', tex: '\\text{FFN}(x) = \\max(0, x W_{1,\\text{dec}} + b_{1,\\text{dec}}) W_{2,\\text{dec}} + b_{2,\\text{dec}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-ffn', equationTermId: 'eq-dec-ffn', codeLineId: 'code-dec-ffn' }],
+    narration: [{ duration: '~30s', objective: 'Explain Decoder Feed Forward Network.', script: 'We pass the cross-attention LN2 representation through two linear transformations with a ReLU activation in between.', audienceQuestion: 'Does the FFN mix information across tokens?', expectedAnswer: 'No, FFN operates position-wise on each token independently.', misconception: 'Clarify that FFN processes rows independently.', transition: 'Next, we apply the third decoder residual connection.' }],
+    speakerNotes: { teachingTips: ['Emphasize that the FFN operates position-wise (per token).'], misconceptions: ['FFN does not perform token-to-token attention.'], suggestedQuestions: ['Why does the FFN expand features to d_ff before projecting back to d_model?'] }
+  },
+  'dec-residual-3': {
+    eyebrow: 'DECODER OPERATOR 8: SKIP CONNECTION 3',
+    title: 'Decoder Residual Connection ③',
+    fourQuestions: {
+      q1: 'What two inputs are added in Decoder Residual Connection ③?',
+      a1: 'decoder.crossAttention.ln2_outputs (input to FFN) and decoder.ffn.outputs (output of FFN).',
+      q2: 'What is the tensor shape?',
+      a2: '[target_seq_len, d_model].',
+      q3: 'Why is Residual Connection ③ essential?',
+      a3: 'It prevents gradient vanishing and preserves cross-attention representation alongside FFN transformations.',
+      q4: 'Does addition preserve tensor dimensions?',
+      a4: 'Yes, element-wise addition preserves shape [L_dec, d_model].'
+    },
+    body: { beginner: 'The third residual connection adds the cross-attention representation back to the FFN output.', mtech: 'residual3 = decoder.crossAttention.ln2_outputs + decoder.ffn.outputs.', research: 'Residual stream ③ accumulates FFN non-linear updates onto the combined self/cross-attention decoder state.' },
+    deepDive: { title: 'Complete Decoder Residual Highway', content: 'A complete decoder block has 3 residual connections: Residual ① (Self-Attn), Residual ② (Cross-Attn), and Residual ③ (FFN).' },
+    whyPanel: { summary: 'Residual Connection ③ integrates FFN outputs into the decoder main highway.' },
+    beforeAfter: { before: 'Decoder LN2 state & FFN Output', after: 'Summed Residual ③ representation' },
+    quickCheck: {
+      question: 'What is the skip connection input to Decoder Residual Connection ③?',
+      options: ['decoder.crossAttention.ln2_outputs', 'decoder.ln1_outputs', 'decoder.xPe', 'encoder.ln2_outputs'],
+      correctIndex: 0,
+      explanation: 'The skip connection for Residual ③ comes from decoder.crossAttention.ln2_outputs.',
+      distractorNotes: { 1: 'Incorrect. decoder.ln1_outputs is skip connection for Residual ②.', 2: 'Incorrect. decoder.xPe is skip connection for Residual ①.', 3: 'Incorrect. encoder.ln2_outputs is encoder output.' }
+    },
+    pytorch: [{ id: 'code-dec-residual-3', code: 'x = x + self.ffn(x)' }],
+    equationTerms: [{ id: 'eq-dec-residual-3', tex: 'X_{\\text{res3}} = X_{\\text{cross\\_ln2}} + \\text{FFN}_{\\text{dec}}' }],
+    syncMap: [{ vizElementId: 'viz-dec-residual-3', equationTermId: 'eq-dec-residual-3', codeLineId: 'code-dec-residual-3' }],
+    narration: [{ duration: '~30s', objective: 'Explain Decoder Residual Connection ③.', script: 'We add decoder.crossAttention.ln2_outputs back to the FFN output.', audienceQuestion: 'How many residual connections exist in a full decoder block?', expectedAnswer: 'Three residual connections.', misconception: 'Confirm that all 3 sublayers have skip connections.', transition: 'Finally, we apply Layer Normalization ③.' }],
+    speakerNotes: { teachingTips: ['Review the 3 residual connections of the decoder block.'], misconceptions: ['Each sublayer (self-attn, cross-attn, FFN) has its own residual connection.'], suggestedQuestions: ['Why does the transformer decoder need 3 residual connections while the encoder needs only 2?'] }
+  },
+  'dec-layernorm-3': {
+    eyebrow: 'DECODER OPERATOR 9: NORMALIZATION 3',
+    title: 'Decoder Layer Normalization ③',
+    fourQuestions: {
+      q1: 'What tensor is normalized in Decoder Layer Normalization ③?',
+      a1: 'The sum from Residual Connection ③ (decoder.ffn.residual3).',
+      q2: 'What are the target statistics before affine scaling?',
+      a2: 'Mean = 0.0, Variance = 1.0 for each target token row.',
+      q3: 'Which parameters perform affine scaling?',
+      a3: 'ln3_gamma_dec and ln3_beta_dec of shape [d_model].',
+      q4: 'What is the final output of the Decoder block?',
+      a4: 'ln3_outputs of shape [target_seq_len, d_model].'
+    },
+    body: { beginner: 'Layer Normalization ③ standardizes the final output vectors of the Transformer Decoder block.', mtech: 'ln3_outputs = LayerNorm(residual3) of shape [L_dec, d_model].', research: 'LN3 completes the Transformer Decoder block, producing refined target vectors ready for final linear projection to vocabulary logits.' },
+    deepDive: { title: 'Decoder Block Completion', content: 'LN3 ensures stable scaling of the complete decoder block output vectors.' },
+    whyPanel: { summary: 'Layer Normalization ③ stabilizes the complete Transformer Decoder block representations.' },
+    beforeAfter: { before: 'Unnormalized Residual ③ sum', after: 'Final normalized Decoder block output' },
+    quickCheck: {
+      question: 'What is the output shape of a complete Transformer Decoder block after LayerNorm ③?',
+      options: ['[target_seq_len, d_model]', '[source_seq_len, d_model]', '[vocab_size, d_model]', '[d_model, d_model]'],
+      correctIndex: 0,
+      explanation: 'The decoder block output preserves shape [target_seq_len, d_model].',
+      distractorNotes: { 1: 'Incorrect. Source sequence length belongs to encoder.', 2: 'Incorrect. Vocabulary projection occurs in the linear head.', 3: 'Incorrect. Weight matrix shape.' }
+    },
+    pytorch: [{ id: 'code-dec-layernorm-3', code: 'x = self.norm3(x)' }],
+    equationTerms: [{ id: 'eq-dec-layernorm-3', tex: '\\text{LN}_3(x) = \\frac{x - \\mu}{\\sqrt{\\sigma^2 + \\epsilon}} \\cdot \\gamma + \\beta' }],
+    syncMap: [{ vizElementId: 'viz-dec-layernorm-3', equationTermId: 'eq-dec-layernorm-3', codeLineId: 'code-dec-layernorm-3' }],
+    narration: [{ duration: '~30s', objective: 'Explain Decoder Layer Normalization ③.', script: 'We normalize Residual ③ outputs across d_model columns to mean 0 and variance 1.', audienceQuestion: 'What does this complete?', expectedAnswer: 'A complete Transformer Decoder block!', misconception: 'Highlight that the full decoder block is now mathematically complete.', transition: 'Stage 5 Transformer Decoder block is complete!' }],
+    speakerNotes: { teachingTips: ['Celebrate completing the entire Transformer Decoder block.'], misconceptions: ['LN3 output is ready for stacking additional decoder blocks or linear classification head.'], suggestedQuestions: ['What comes after LayerNorm 3 in a full translation model?'] }
+  },
+  'input-sentence': {
+    eyebrow: 'TRANSFORMER SETUP: DUAL INPUT SEQUENCES',
+    title: 'Input Sentence Setup',
+    fourQuestions: {
+      q1: 'What are the two input streams in a sequence-to-sequence Transformer?',
+      a1: 'The source sentence fed to the Encoder, and the target sentence fed to the Decoder.',
+      q2: 'How are source tokens processed in the Encoder?',
+      a2: 'All source tokens are processed simultaneously in parallel.',
+      q3: 'How are target tokens processed in the Decoder during inference?',
+      a3: 'Sequentially, one token at a time in an auto-regressive loop.',
+      q4: 'Can users interactively modify these input sentences?',
+      a4: 'Yes, adding or removing words updates all downstream matrices in real time.'
+    },
+    body: { beginner: 'Transformers take a source sentence for the Encoder and a target sentence for the Decoder to learn translations or sequence tasks.', mtech: 'X_{\\text{enc}} \\in \\mathbb{R}^{L_{\\text{enc}} \\times d_{\\text{model}}}, X_{\\text{dec}} \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_{\\text{model}}}.', research: 'Bilingual tokenization maps source and target text into shared or distinct vocabulary subwords.' },
+    deepDive: { title: 'Bilingual Sequence Pair Setup', content: 'Encoder receives unmasked source context while Decoder receives causally masked target context.' },
+    whyPanel: { summary: 'Sequence initialization defines the primary tensor dimensions for the entire attention pipeline.' },
+    beforeAfter: { before: 'Raw text strings', after: 'Structured source and target token sequences' },
+    quickCheck: {
+      question: 'Which component processes all input tokens simultaneously in parallel?',
+      options: ['The Encoder', 'The Decoder during auto-regressive generation', 'The Softmax classification head', 'The greedy argmax operator'],
+      correctIndex: 0,
+      explanation: 'The Encoder processes the complete source sequence in parallel.',
+      distractorNotes: { 1: 'Incorrect. Decoder inference is sequential.', 2: 'Incorrect. Softmax operates per position.', 3: 'Incorrect. Argmax is a point-wise operator.' }
+    },
+    pytorch: [{ id: 'code-input-sentence', code: 'src = ["cat", "chased", "dog"]\ntgt = ["the", "dog", "ran"]' }],
+    equationTerms: [{ id: 'eq-input-sentence', tex: 'X_{\\text{src}} \\in \\mathbb{R}^{L_{\\text{enc}}}, X_{\\text{tgt}} \\in \\mathbb{R}^{L_{\\text{dec}}}' }],
+    syncMap: [{ vizElementId: 'viz-input-sentence', equationTermId: 'eq-input-sentence', codeLineId: 'code-input-sentence' }],
+    narration: [{ duration: '~30s', objective: 'Explain dual sequence inputs.', script: 'We initialize the Encoder source sentence and Decoder target sentence.', audienceQuestion: 'Why does the Transformer need two inputs?', expectedAnswer: 'One for the source context, one for the target sequence.', misconception: 'Confirm that source and target can have different sequence lengths.', transition: 'Next, let\'s convert raw words into vocabulary tokens and embeddings.' }],
+    speakerNotes: { teachingTips: ['Demonstrate changing words in Interactive Mode.'], misconceptions: ['Source and target sequence lengths do not need to be equal.'], suggestedQuestions: ['Why is the encoder unmasked while the decoder is masked?'] }
+  },
+  'tokenize': {
+    eyebrow: 'TRANSFORMER SETUP: TOKENIZATION & EMBEDDINGS',
+    title: 'Tokenization & Vector Lookup',
+    fourQuestions: {
+      q1: 'What is tokenization?',
+      a1: 'Breaking raw text into discrete vocabulary tokens and assigning integer IDs.',
+      q2: 'How are vocabulary IDs converted to continuous vectors?',
+      a2: 'By looking up rows in an embedding matrix W_embed of shape [vocab_size, d_model].',
+      q3: 'What is the dimension of the embedding vectors?',
+      a3: 'd_model channels (e.g. 16, 64, 512).',
+      q4: 'Why scale embeddings by sqrt(d_model)?',
+      a4: 'To balance embedding magnitudes with positional encodings.'
+    },
+    body: { beginner: 'Words are split into tokens, mapped to dictionary IDs, and converted into d_model dimensional numerical vectors.', mtech: 'E = \\text{Embedding}(X_{\\text{ids}}) \\cdot \\sqrt{d_{\\text{model}}} \\in \\mathbb{R}^{L \\times d_{\\text{model}}}.', research: 'Subword tokenization algorithms like BPE and WordPiece handle out-of-vocabulary words smoothly.' },
+    deepDive: { title: 'Embedding Scale Factor', content: 'Vaswani et al. multiply embedding vectors by sqrt(d_model) prior to adding positional encodings.' },
+    whyPanel: { summary: 'Token embeddings transform discrete words into dense continuous vector spaces for neural network processing.' },
+    beforeAfter: { before: 'Discrete word text', after: 'Continuous d_model dimensional embedding vectors' },
+    quickCheck: {
+      question: 'What is the shape of an embedding table matrix W_embed?',
+      options: ['[vocab_size, d_model]', '[seq_len, d_model]', '[d_model, d_model]', '[vocab_size, seq_len]'],
+      correctIndex: 0,
+      explanation: 'The embedding table has one d_model row for every token in the vocabulary.',
+      distractorNotes: { 1: 'Incorrect. seq_len is sequence length.', 2: 'Incorrect. Square model matrix.', 3: 'Incorrect. Invalid dimensions.' }
+    },
+    pytorch: [{ id: 'code-tokenize', code: 'embeds = self.embedding(token_ids) * math.sqrt(d_model)' }],
+    equationTerms: [{ id: 'eq-tokenize', tex: 'E = W_{\\text{embed}}[X_{\\text{ids}}] \\cdot \\sqrt{d_{\\text{model}}}' }],
+    syncMap: [{ vizElementId: 'viz-tokenize', equationTermId: 'eq-tokenize', codeLineId: 'code-tokenize' }],
+    narration: [{ duration: '~30s', objective: 'Explain tokenization and embedding lookup.', script: 'Tokens are mapped to vocabulary IDs and retrieved from the embedding matrix as dense d_model vectors.', audienceQuestion: 'Why multiply by sqrt(d_model)?', expectedAnswer: 'To ensure embedding values match the variance of positional encodings.', misconception: 'Confirm vector dimensions.', transition: 'Now let\'s inspect the Residual Stream highway.' }],
+    speakerNotes: { teachingTips: ['Explain how token IDs index rows of W_embed.'], misconceptions: ['Token IDs are arbitrary integers; embedding vectors carry semantic meaning.'], suggestedQuestions: ['How does subword tokenization handle rare words?'] }
+  },
+  'residual-stream': {
+    eyebrow: 'TRANSFORMER SETUP: ARCHITECTURAL HIGHWAY',
+    title: 'Residual Stream & Normalization Flow',
+    fourQuestions: {
+      q1: 'What is the residual stream in a Transformer block?',
+      a1: 'The continuous vector highway passed through skip connections across sublayers.',
+      q2: 'Which sublayers add their outputs back into the residual stream?',
+      a2: 'Multi-Head Attention and Position-wise Feed Forward Networks.',
+      q3: 'Why are residual connections critical for deep Transformers?',
+      a3: 'They enable unimpeded gradient flow during backpropagation and prevent vanishing gradients.',
+      q4: 'What is the function of Layer Normalization in the residual highway?',
+      a4: 'It stabilizes vector scales and activations across sublayers.'
+    },
+    body: { beginner: 'The residual stream acts as an information highway where attention and FFN sublayers add updates without destroying original features.', mtech: 'X_{l} = \\text{LayerNorm}(X_{l-1} + \\text{SubLayer}(X_{l-1})).', research: 'Pre-LN vs Post-LN architectural variants offer different training stability trade-offs.' },
+    deepDive: { title: 'Residual Stream Representation', content: 'Sublayers write additive updates delta_X onto the persistent residual stream.' },
+    whyPanel: { summary: 'Residual connections preserve representation stability across multi-layer deep networks.' },
+    beforeAfter: { before: 'Isolated sublayers', after: 'Unified residual stream highway' },
+    quickCheck: {
+      question: 'Why are skip connections used in every Transformer sublayer?',
+      options: ['To allow gradients to flow cleanly and preserve information', 'To reduce vocabulary size', 'To disable attention', 'To speed up tokenization'],
+      correctIndex: 0,
+      explanation: 'Residual skip connections prevent vanishing gradients and preserve information flow.',
+      distractorNotes: { 1: 'Incorrect. Vocabulary size is independent.', 2: 'Incorrect. Attention is active.', 3: 'Incorrect. Tokenization occurs prior.' }
+    },
+    pytorch: [{ id: 'code-residual-stream', code: 'x = x + self.attn(x)\nx = self.norm1(x)' }],
+    equationTerms: [{ id: 'eq-residual-stream', tex: 'X_{\\text{out}} = \\text{LayerNorm}(X_{\\text{in}} + \\text{SubLayer}(X_{\\text{in}}))' }],
+    syncMap: [{ vizElementId: 'viz-residual-stream', equationTermId: 'eq-residual-stream', codeLineId: 'code-residual-stream' }],
+    narration: [{ duration: '~30s', objective: 'Explain the residual stream highway.', script: 'The residual stream passes information cleanly through addition and LayerNorm operations.', audienceQuestion: 'What happens if we remove skip connections?', expectedAnswer: 'Gradients vanish and deep networks fail to train.', misconception: 'Highlight the additive nature of transformer sublayers.', transition: 'Now let\'s begin Linear Projections for Multi-Head Attention!' }],
+    speakerNotes: { teachingTips: ['Visualize the residual stream as a main highway with sublayer offramps.'], misconceptions: ['Sublayers do not replace vectors; they add updates to the stream.'], suggestedQuestions: ['What is the difference between Pre-LN and Post-LN Transformer architectures?'] }
+  },
+  'decoder-stack': {
+    eyebrow: 'TRANSFORMER DECODER: LAYER STACKING',
+    title: 'Decoder Stack (Depth N)',
+    fourQuestions: {
+      q1: 'How are decoder blocks stacked in deep Transformer architectures?',
+      a1: 'The output of LayerNorm 3 of block N becomes the input representation to block N+1.',
+      q2: 'Does each decoder block re-attend to the same encoder output?',
+      a2: 'Yes, every decoder block performs Cross-Attention using the same final encoder output (encoder.ln2_outputs).',
+      q3: 'What is the default layer depth N in Vaswani et al. (2017)?',
+      a3: 'N = 6 identical decoder blocks.',
+      q4: 'Why stack multiple decoder blocks?',
+      a4: 'To build increasingly abstract and complex target language representations.'
+    },
+    body: { beginner: 'Multiple identical decoder blocks are stacked on top of each other, each refining target representations and re-attending to source context.', mtech: 'X_{l} = \\text{DecoderBlock}_l(X_{l-1}, H_{\\text{encoder}}) for l = 1 \\dots N.', research: 'Deep decoder stacks enable complex syntactic restructuring and target language modeling.' },
+    deepDive: { title: 'Cross-Attention Persistence Across Stack', content: 'Encoder outputs are computed once and fed into all N decoder blocks in parallel.' },
+    whyPanel: { summary: 'Stacking decoder blocks deepens contextual reasoning and auto-regressive generation capability.' },
+    beforeAfter: { before: 'Single Decoder Block', after: 'Stacked N-layer Decoder Architecture' },
+    quickCheck: {
+      question: 'Which encoder tensor is fed to cross-attention in every stacked decoder layer?',
+      options: ['encoder.ln2_outputs', 'encoder.xPe', 'encoder.embeddings', 'decoder.ln1_outputs'],
+      correctIndex: 0,
+      explanation: 'Every decoder layer uses the final encoder output encoder.ln2_outputs for its Keys and Values.',
+      distractorNotes: { 1: 'Incorrect. encoder.xPe is un-contextualized.', 2: 'Incorrect. Embeddings lack transformer layer context.', 3: 'Incorrect. decoder.ln1_outputs is internal decoder state.' }
+    },
+    pytorch: [{ id: 'code-decoder-stack', code: 'for layer in self.decoder_layers:\n    x = layer(x, memory)' }],
+    equationTerms: [{ id: 'eq-decoder-stack', tex: 'X^{(N)} = \\text{DecoderStack}(X^{(0)}, H_{\\text{enc}})' }],
+    syncMap: [{ vizElementId: 'viz-decoder-stack', equationTermId: 'eq-decoder-stack', codeLineId: 'code-decoder-stack' }],
+    narration: [{ duration: '~30s', objective: 'Explain Decoder Stack depth.', script: 'We stack N decoder layers where each layer refines target features while querying the same encoder output.', audienceQuestion: 'Does the encoder re-run for each decoder layer?', expectedAnswer: 'No, encoder outputs are cached and reused across all N layers.', misconception: 'Confirm encoder caching across all decoder layers.', transition: 'Now let\'s project final decoder outputs to vocabulary logits.' }],
+    speakerNotes: { teachingTips: ['Demonstrate how layer depth N enhances feature abstraction.'], misconceptions: ['The encoder is NOT re-run for each decoder layer.'], suggestedQuestions: ['Why does cross-attention use the same encoder output across all layers?'] }
+  },
+  'vocab-projection': {
+    eyebrow: 'TRANSFORMER HEAD: LINEAR PROJECTION',
+    title: 'Vocabulary Linear Projection',
+    fourQuestions: {
+      q1: 'Which matrix projects decoder outputs to vocabulary logits?',
+      a1: 'W_vocab of shape [d_model, vocab_size].',
+      q2: 'What is the output tensor shape of the vocabulary projection?',
+      a2: '[target_seq_len, vocab_size].',
+      q3: 'What do raw logit values represent?',
+      a3: 'Unnormalized scores for every word in the vocabulary at each sequence position.',
+      q4: 'Can weight tying be used here?',
+      a4: 'Yes, Vaswani et al. share weights between target embedding matrix and W_vocab.'
+    },
+    body: { beginner: 'The output linear layer maps target d_model vectors into raw score logits for every word in the dictionary.', mtech: 'Z_vocab = X_dec_ln3 * W_vocab + b_vocab of shape [L_dec, |V|].', research: 'Weight tying (sharing W_vocab with target embedding matrix) significantly reduces parameter count and improves generalization.' },
+    deepDive: { title: 'Weight Tying Strategy', content: 'Sharing weights between embedding and classification head enforces semantic alignment between input and output tokens.' },
+    whyPanel: { summary: 'Vocabulary projection translates d_model vector representations into word score vectors.' },
+    beforeAfter: { before: 'Decoder final output [L_dec, d_model]', after: 'Unnormalized logits [L_dec, |V|]' },
+    quickCheck: {
+      question: 'What is the shape of the vocabulary logit matrix Z_vocab?',
+      options: ['[target_seq_len, vocab_size]', '[target_seq_len, d_model]', '[vocab_size, d_model]', '[d_model, d_model]'],
+      correctIndex: 0,
+      explanation: 'Vocabulary projection maps d_model to vocab_size for each target position.',
+      distractorNotes: { 1: 'Incorrect. d_model is feature dimension.', 2: 'Incorrect. Weight matrix shape.', 3: 'Incorrect. Square model matrix.' }
+    },
+    pytorch: [{ id: 'code-vocab-projection', code: 'logits = self.linear_head(dec_output)' }],
+    equationTerms: [{ id: 'eq-vocab-projection', tex: 'Z_{\\text{vocab}} = X_{\\text{dec\\_final}} W_{\\text{vocab}} + b_{\\text{vocab}}' }],
+    syncMap: [{ vizElementId: 'viz-vocab-projection', equationTermId: 'eq-vocab-projection', codeLineId: 'code-vocab-projection' }],
+    narration: [{ duration: '~30s', objective: 'Explain vocabulary linear projection.', script: 'We project the d_model vector at each target position into raw logits for every word in our vocabulary.', audienceQuestion: 'What is the dimension of W_vocab?', expectedAnswer: 'd_model by vocabulary size.', misconception: 'Clarify that logits are raw, unnormalized scores.', transition: 'Next, we apply Softmax to get probability distributions.' }],
+    speakerNotes: { teachingTips: ['Explain weight tying between target embeddings and W_vocab.'], misconceptions: ['Logits are not probabilities; they must be normalized by Softmax.'], suggestedQuestions: ['Why is weight tying beneficial in translation models?'] }
+  },
+  'softmax-output': {
+    eyebrow: 'TRANSFORMER HEAD: PROBABILITY DISTRIBUTION',
+    title: 'Vocabulary Softmax Probabilities',
+    fourQuestions: {
+      q1: 'How are vocabulary probabilities computed?',
+      a1: 'Softmax is applied across vocabulary columns for each target token row: P[i] = softmax(Z[i]).',
+      q2: 'What is the sum of probabilities across the vocabulary for position i?',
+      a2: 'Exactly 1.0 (100%).',
+      q3: 'What does P[i][v] represent?',
+      a3: 'The probability that the token at position i is vocabulary word v.',
+      q4: 'What loss function is paired with these probabilities during training?',
+      a4: 'Categorical Cross-Entropy Loss with label smoothing.'
+    },
+    body: { beginner: 'Softmax converts raw word logits into a probability distribution where all word probabilities for a position sum to 100%.', mtech: 'P(x_t = v | x_<t) = softmax(Z_vocab[t, v]) over vocabulary V.', research: 'Softmax temperature scaling can control generation diversity during sampling.' },
+    deepDive: { title: 'Probability Normalization across Vocabulary', content: 'Softmax ensures a valid categorical probability distribution P over thousands of vocabulary tokens.' },
+    whyPanel: { summary: 'Softmax produces normalized probabilities for word prediction and cross-entropy loss.' },
+    beforeAfter: { before: 'Unnormalized logits Z_vocab', after: 'Normalized probability matrix P' },
+    quickCheck: {
+      question: 'What is the sum of probabilities across all vocabulary words for a single position?',
+      options: ['1.0', '0.0', 'vocab_size', 'd_model'],
+      correctIndex: 0,
+      explanation: 'Softmax normalizes each token position row so probabilities sum to 1.0.',
+      distractorNotes: { 1: 'Incorrect. Sum is 1.0.', 2: 'Incorrect. vocab_size is number of columns.', 3: 'Incorrect. d_model is feature dimension.' }
+    },
+    pytorch: [{ id: 'code-softmax-output', code: 'probs = F.softmax(logits, dim=-1)' }],
+    equationTerms: [{ id: 'eq-softmax-output', tex: 'P(x_t = v \\mid x_{<t}) = \\frac{\\exp(Z_t(v))}{\\sum_{w \\in V} \\exp(Z_t(w))}' }],
+    syncMap: [{ vizElementId: 'viz-softmax-output', equationTermId: 'eq-softmax-output', codeLineId: 'code-softmax-output' }],
+    narration: [{ duration: '~30s', objective: 'Explain Softmax probability distribution.', script: 'Softmax normalizes raw word scores into probabilities that sum to 1.0 for each position.', audienceQuestion: 'What does each row represent?', expectedAnswer: 'A probability distribution over all vocabulary words.', misconception: 'Confirm row normalization.', transition: 'Now we select the predicted next token using Argmax.' }],
+    speakerNotes: { teachingTips: ['Show how high probabilities correspond to top candidate words.'], misconceptions: ['Probabilities are per position row, not per vocabulary column.'], suggestedQuestions: ['How does temperature scaling affect Softmax probabilities?'] }
+  },
+  'next-token': {
+    eyebrow: 'TRANSFORMER HEAD: TOKEN SELECTION',
+    title: 'Next-Token Prediction',
+    fourQuestions: {
+      q1: 'How is the next token selected during greedy decoding?',
+      a1: 'predicted_token = argmax_v P(last_token_pos, v).',
+      q2: 'What position in the decoder sequence determines the next generated word?',
+      a2: 'The last token position (t = L_dec).',
+      q3: 'What is Top-K sampling?',
+      a3: 'Restricting candidate selection to the K highest probability vocabulary words.',
+      q4: 'What is the predicted token in our interactive pipeline?',
+      a4: 'The token with the highest Softmax probability at the last sequence position.'
+    },
+    body: { beginner: 'Greedy decoding selects the word with the highest probability at the final sequence position as the next generated token.', mtech: 'y_t = argmax_{v in V} P(x_t = v | x_<t).', research: 'Beam search and Top-p (nucleus) sampling provide alternative generation strategies to greedy argmax.' },
+    deepDive: { title: 'Greedy vs Sampling Decoding Strategies', content: 'Greedy argmax is deterministic, while Top-k and nucleus sampling add creative diversity.' },
+    whyPanel: { summary: 'Argmax picks the single most likely token to extend the sequence.' },
+    beforeAfter: { before: 'Full vocabulary probability vector', after: 'Selected next token y_t' },
+    quickCheck: {
+      question: 'Which position in the decoder sequence determines the next token prediction?',
+      options: ['The last position (L_dec)', 'The first position (position 0)', 'The middle position', 'All positions averaged'],
+      correctIndex: 0,
+      explanation: 'In auto-regressive generation, prediction is driven by the representation at the last position L_dec.',
+      distractorNotes: { 1: 'Incorrect. Position 0 is the start token.', 2: 'Incorrect. Middle tokens predict historical tokens.', 3: 'Incorrect. Average is not used.' }
+    },
+    pytorch: [{ id: 'code-next-token', code: 'next_token_id = torch.argmax(probs[:, -1, :], dim=-1)' }],
+    equationTerms: [{ id: 'eq-next-token', tex: 'y_t = \\text{argmax}_{v \\in V} P(x_t = v \\mid x_{<t}, H_{\\text{enc}})' }],
+    syncMap: [{ vizElementId: 'viz-next-token', equationTermId: 'eq-next-token', codeLineId: 'code-next-token' }],
+    narration: [{ duration: '~30s', objective: 'Explain next-token prediction via Argmax.', script: 'We inspect the last sequence position and pick the token with highest probability as our prediction.', audienceQuestion: 'Why do we look at the last position?', expectedAnswer: 'Because the last position aggregates all prior target context.', misconception: 'Clarify that only the last row predicts the next un-generated token.', transition: 'Now let\'s simulate the complete auto-regressive loop.' }],
+    speakerNotes: { teachingTips: ['Demonstrate how Argmax selects the top token from the Top-5 distribution.'], misconceptions: ['Prediction looks at the last token row, not all rows.'], suggestedQuestions: ['What is the difference between greedy decoding and beam search?'] }
+  },
+  'autoregressive-generation': {
+    eyebrow: 'TRANSFORMER DECODER: GENERATION LOOP',
+    title: 'Autoregressive Generation Loop',
+    fourQuestions: {
+      q1: 'What defines auto-regressive generation in Transformers?',
+      a1: 'Previously predicted tokens are appended to the target sequence and fed back as input for the next step.',
+      q2: 'When does auto-regressive generation stop?',
+      a2: 'When the model predicts the special End-of-Sequence token (<eos>) or reaches max length.',
+      q3: 'Why is auto-regressive generation sequential during inference?',
+      a3: 'Because token t cannot be predicted until token t-1 is known.',
+      q4: 'Is auto-regressive generation sequential during training?',
+      a4: 'No! Training uses teacher forcing with causal masking to compute all positions in parallel.'
+    },
+    body: { beginner: 'Autoregressive generation predicts tokens one by one, appending each new word to the target sentence until <eos> is emitted.', mtech: 'x_{t+1} = \\text{Decoder}(x_1 \\dots x_t, H_{\\text{enc}}) repeatedly until x_{t+1} = \\text{<eos>}.', research: 'KV-caching avoids re-computing past key-value states, turning O(N^2) decoding step complexity into O(N).' },
+    deepDive: { title: 'Inference Efficiency and KV Caching', content: 'Caching Keys and Values from previous decoding steps allows single-token forward passes during inference.' },
+    whyPanel: { summary: 'The auto-regressive loop enables full sentence translation and text generation.' },
+    beforeAfter: { before: 'Initial target sequence', after: 'Completed generated sentence ending with <eos>' },
+    quickCheck: {
+      question: 'Why is training parallel while inference is sequential in Transformers?',
+      options: ['Training uses teacher forcing with causal masking; inference depends on generated tokens.', 'Inference has no GPUs.', 'Training has no attention layers.', 'Inference ignores encoder outputs.'],
+      correctIndex: 0,
+      explanation: 'Teacher forcing during training allows parallel forward passes, whereas inference must generate sequentially.',
+      distractorNotes: { 1: 'Incorrect. Both use GPUs.', 2: 'Incorrect. Both use attention.', 3: 'Incorrect. Inference relies heavily on encoder outputs.' }
+    },
+    pytorch: [{ id: 'code-autoregressive-generation', code: 'while next_token != eos_id:\n    out = model(target, memory)\n    next_token = out.argmax(-1)\n    target.append(next_token)' }],
+    equationTerms: [{ id: 'eq-autoregressive-generation', tex: 'P(y_1, \\dots, y_M \\mid X) = \\prod_{t=1}^{M} P(y_t \\mid y_{<t}, X)' }],
+    syncMap: [{ vizElementId: 'viz-autoregressive-generation', equationTermId: 'eq-autoregressive-generation', codeLineId: 'code-autoregressive-generation' }],
+    narration: [{ duration: '~35s', objective: 'Explain auto-regressive generation loop.', script: 'In the auto-regressive loop, each predicted token is appended to the target sequence and fed back into the decoder.', audienceQuestion: 'When does generation stop?', expectedAnswer: 'When <eos> is predicted or max length is reached.', misconception: 'Highlight the contrast between parallel training and sequential inference.', transition: 'The entire Transformer Architecture is now fully implemented and verified!' }],
+    speakerNotes: { teachingTips: ['Demonstrate clicking "Step Next Token" to show sequential sequence growth.'], misconceptions: ['Inference cannot be parallelized across sequence steps.'], suggestedQuestions: ['How does KV-caching accelerate auto-regressive inference?'] }
   }
 };
 

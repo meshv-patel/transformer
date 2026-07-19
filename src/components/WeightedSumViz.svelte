@@ -97,7 +97,14 @@
     lectureWeights
   });
 
-  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: attentionType = $currentScene?.config?.attentionType ?? 'self';
+  $: isDecoderStream = stream === 'decoder';
+  $: isCrossAttention = attentionType === 'cross';
+
+  $: activePipeline = isCrossAttention
+    ? interactiveData?.decoder?.crossAttention
+    : (isDecoderStream ? interactiveData?.decoder : interactiveData);
 
   // Bind active matrices/vectors based on dataMode
   $: activeAttentionWeights = $dataMode === 'lecture' && !isDecoderStream

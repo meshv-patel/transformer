@@ -107,7 +107,7 @@ export function attention(q, k, v, dK) {
  * Safe weight retrieval supporting dynamic scaling/resizing in Interactive Mode.
  */
 export function getInteractiveWeights(weightKey, dModelVal, lectureWeights) {
-  const fallbackKey = weightKey.endsWith('_dec') ? weightKey.replace('_dec', '') : weightKey;
+  const fallbackKey = weightKey.replace(/_dec|_cross/, '');
   const baseW = lectureWeights?.[weightKey] ?? lectureWeights?.[fallbackKey];
   if (!baseW || !baseW.length || !baseW[0].length) {
     // Return compatible identity fallback
@@ -135,7 +135,7 @@ export function getInteractiveWeights(weightKey, dModelVal, lectureWeights) {
  * Safe bias retrieval supporting dynamic scaling/resizing in Interactive Mode.
  */
 export function getInteractiveBias(biasKey, dModelVal, lectureWeights) {
-  const fallbackKey = biasKey.endsWith('_dec') ? biasKey.replace('_dec', '') : biasKey;
+  const fallbackKey = biasKey.replace(/_dec|_cross/, '');
   const baseB = lectureWeights?.[biasKey] ?? lectureWeights?.[fallbackKey];
   if (!baseB || !baseB.length) {
     return new Array(dModelVal).fill(0);
@@ -167,6 +167,9 @@ export function computeAttentionPipeline({
   const sentence = encoderSentence;
   const dModelVal = dModel;
   const numHeadsVal = numHeads;
+  if (dModelVal % numHeadsVal !== 0) {
+    throw new Error(`dModel (${dModelVal}) must be divisible by numHeads (${numHeadsVal})`);
+  }
   const safeDKVal = Math.max(1, Math.floor(dModelVal / (numHeadsVal || 1)));
   const eps = 1e-5;
 
@@ -483,6 +486,233 @@ export function computeAttentionPipeline({
     ln2_outputs.push(outRow);
   }
 
+  // --- Decoder Stage 4: Cross Attention ---
+  const dec_cross_Qinput = dec_ln1_outputs;
+  const dec_cross_KVinput = ln2_outputs;
+
+  const Wq_cross = getInteractiveWeights('Wq_cross', dModelVal, lectureWeights);
+  const bq_cross = getInteractiveBias('bq_cross', dModelVal, lectureWeights);
+  const Wk_cross = getInteractiveWeights('Wk_cross', dModelVal, lectureWeights);
+  const bk_cross = getInteractiveBias('bk_cross', dModelVal, lectureWeights);
+  const Wv_cross = getInteractiveWeights('Wv_cross', dModelVal, lectureWeights);
+  const bv_cross = getInteractiveBias('bv_cross', dModelVal, lectureWeights);
+  const Wo_cross = getInteractiveWeights('Wo_cross', dModelVal, lectureWeights);
+  const bo_cross = getInteractiveBias('bo_cross', dModelVal, lectureWeights);
+
+  const dec_cross_Q = matmul(dec_cross_Qinput, Wq_cross).map((row) => row.map((v, c) => v + bq_cross[c]));
+  const dec_cross_K = matmul(dec_cross_KVinput, Wk_cross).map((row) => row.map((v, c) => v + bk_cross[c]));
+  const dec_cross_V = matmul(dec_cross_KVinput, Wv_cross).map((row) => row.map((v, c) => v + bv_cross[c]));
+
+  const dec_cross_Qh = Array.from({ length: decoderSentence.length }, (_, i) =>
+    Array.from({ length: numHeadsVal }, (_, h) => dec_cross_Q[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
+  );
+  const dec_cross_Kh = Array.from({ length: sentence.length }, (_, i) =>
+    Array.from({ length: numHeadsVal }, (_, h) => dec_cross_K[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
+  );
+  const dec_cross_Vh = Array.from({ length: sentence.length }, (_, i) =>
+    Array.from({ length: numHeadsVal }, (_, h) => dec_cross_V[i].slice(h * safeDKVal, (h + 1) * safeDKVal))
+  );
+
+  const dec_cross_Qh_trans = splitHeads(dec_cross_Q, numHeadsVal);
+  const dec_cross_Kh_trans = splitHeads(dec_cross_K, numHeadsVal);
+  const dec_cross_Vh_trans = splitHeads(dec_cross_V, numHeadsVal);
+
+  const dec_cross_scores = [];
+  const dec_cross_weights = [];
+  const dec_cross_outputHeads = [];
+  const dec_cross_concatenatedOutput = Array.from({ length: decoderSentence.length }, () => new Array(dModelVal).fill(0));
+
+  for (let h = 0; h < numHeadsVal; h++) {
+    const qHead = dec_cross_Qh_trans[h] ?? [];
+    const kHead = dec_cross_Kh_trans[h] ?? [];
+    const vHead = dec_cross_Vh_trans[h] ?? [];
+
+    const rawHeadScores = scale(matmul(qHead, transpose(kHead)), 1 / Math.sqrt(safeDKVal));
+    dec_cross_scores.push(rawHeadScores);
+
+    const headWeights = softmaxRows(rawHeadScores);
+    dec_cross_weights.push(headWeights);
+
+    const headOutput = matmul(headWeights, vHead);
+    dec_cross_outputHeads.push(headOutput);
+
+    for (let i = 0; i < decoderSentence.length; i++) {
+      for (let d = 0; d < safeDKVal; d++) {
+        const destIdx = h * safeDKVal + d;
+        if (destIdx < dModelVal && headOutput[i] && d < headOutput[i].length) {
+          dec_cross_concatenatedOutput[i][destIdx] = headOutput[i][d];
+        }
+      }
+    }
+  }
+
+  const dec_cross_outputProj = matmul(dec_cross_concatenatedOutput, Wo_cross).map((row) => row.map((v, c) => v + bo_cross[c]));
+
+  // Decoder Stage 4: Residual 2 & LayerNorm 2
+  const dec_cross_residual2 = dec_cross_Qinput.map((qRow, i) =>
+    qRow.map((v, c) => v + (dec_cross_outputProj[i]?.[c] ?? 0))
+  );
+
+  const ln2_gamma_dec = getInteractiveBias('ln2_gamma_dec', dModelVal, lectureWeights).map((v, i) => (v === 0 ? 1 : v));
+  const ln2_beta_dec = getInteractiveBias('ln2_beta_dec', dModelVal, lectureWeights);
+
+  const dec_cross_ln2_means = [];
+  const dec_cross_ln2_vars = [];
+  const dec_cross_ln2_norms = [];
+  const dec_cross_ln2_outputs = [];
+
+  for (let i = 0; i < decoderSentence.length; i++) {
+    const row = dec_cross_residual2[i];
+    if (!row || !row.length) {
+      dec_cross_ln2_means.push(0);
+      dec_cross_ln2_vars.push(0);
+      dec_cross_ln2_norms.push([]);
+      dec_cross_ln2_outputs.push([]);
+      continue;
+    }
+    const mean = row.reduce((a, b) => a + b, 0) / row.length;
+    const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / row.length;
+    const denom = Math.sqrt(variance + eps);
+    const norm = row.map((v) => (v - mean) / denom);
+    const outRow = norm.map((v, c) => v * (ln2_gamma_dec[c] ?? 1) + (ln2_beta_dec[c] ?? 0));
+
+    dec_cross_ln2_means.push(mean);
+    dec_cross_ln2_vars.push(variance);
+    dec_cross_ln2_norms.push(norm);
+    dec_cross_ln2_outputs.push(outRow);
+  }
+
+  decoderState.crossAttention = {
+    queryInput: dec_cross_Qinput,
+    keyValueInput: dec_cross_KVinput,
+    Q: dec_cross_Q,
+    K: dec_cross_K,
+    V: dec_cross_V,
+    Qh: dec_cross_Qh,
+    Kh: dec_cross_Kh,
+    Vh: dec_cross_Vh,
+    Qh_trans: dec_cross_Qh_trans,
+    Kh_trans: dec_cross_Kh_trans,
+    Vh_trans: dec_cross_Vh_trans,
+    scores: dec_cross_scores,
+    weights: dec_cross_weights,
+    outputHeads: dec_cross_outputHeads,
+    concatenatedOutput: dec_cross_concatenatedOutput,
+    outputProj: dec_cross_outputProj,
+    residual2: dec_cross_residual2,
+    ln2_means: dec_cross_ln2_means,
+    ln2_vars: dec_cross_ln2_vars,
+    ln2_norms: dec_cross_ln2_norms,
+    ln2_outputs: dec_cross_ln2_outputs
+  };
+
+  // --- Decoder Stage 5: Position-wise Feed Forward Network (FFN), Residual 3 & LayerNorm 3 ---
+  const dec_ffn_input = dec_cross_ln2_outputs;
+  const dec_dFFVal = 2 * dModelVal;
+
+  const W_ffn1_dec = getInteractiveWeights2D('W_ffn1_dec', dModelVal, dec_dFFVal, lectureWeights);
+  const b_ffn1_dec = getInteractiveBias1D('b_ffn1_dec', dec_dFFVal, lectureWeights);
+  const W_ffn2_dec = getInteractiveWeights2D('W_ffn2_dec', dec_dFFVal, dModelVal, lectureWeights);
+  const b_ffn2_dec = getInteractiveBias1D('b_ffn2_dec', dModelVal, lectureWeights);
+
+  const dec_ffn_linear1 = matmul(dec_ffn_input, W_ffn1_dec).map((row) =>
+    row.map((v, c) => v + (b_ffn1_dec[c] ?? 0))
+  );
+
+  const dec_ffn_activation = dec_ffn_linear1.map((row) =>
+    row.map((v) => Math.max(0, v))
+  );
+
+  const dec_ffn_outputs = matmul(dec_ffn_activation, W_ffn2_dec).map((row) =>
+    row.map((v, c) => v + (b_ffn2_dec[c] ?? 0))
+  );
+
+  const dec_ffn_residual3 = dec_ffn_input.map((xRow, i) =>
+    xRow.map((v, c) => v + (dec_ffn_outputs[i]?.[c] ?? 0))
+  );
+
+  const ln3_gamma_dec = getInteractiveBias('ln3_gamma_dec', dModelVal, lectureWeights).map((v, i) => (v === 0 ? 1 : v));
+  const ln3_beta_dec = getInteractiveBias('ln3_beta_dec', dModelVal, lectureWeights);
+
+  const dec_ffn_ln3_means = [];
+  const dec_ffn_ln3_vars = [];
+  const dec_ffn_ln3_norms = [];
+  const dec_ffn_ln3_outputs = [];
+
+  for (let i = 0; i < decoderSentence.length; i++) {
+    const row = dec_ffn_residual3[i];
+    if (!row || !row.length) {
+      dec_ffn_ln3_means.push(0);
+      dec_ffn_ln3_vars.push(0);
+      dec_ffn_ln3_norms.push([]);
+      dec_ffn_ln3_outputs.push([]);
+      continue;
+    }
+    const mean = row.reduce((a, b) => a + b, 0) / row.length;
+    const variance = row.reduce((a, b) => a + (b - mean) ** 2, 0) / row.length;
+    const denom = Math.sqrt(variance + eps);
+    const norm = row.map((v) => (v - mean) / denom);
+    const outRow = norm.map((v, c) => v * (ln3_gamma_dec[c] ?? 1) + (ln3_beta_dec[c] ?? 0));
+
+    dec_ffn_ln3_means.push(mean);
+    dec_ffn_ln3_vars.push(variance);
+    dec_ffn_ln3_norms.push(norm);
+    dec_ffn_ln3_outputs.push(outRow);
+  }
+
+  decoderState.ffn = {
+    linear1: dec_ffn_linear1,
+    activation: dec_ffn_activation,
+    outputs: dec_ffn_outputs,
+    residual3: dec_ffn_residual3,
+    ln3_means: dec_ffn_ln3_means,
+    ln3_vars: dec_ffn_ln3_vars,
+    ln3_norms: dec_ffn_ln3_norms,
+    ln3_outputs: dec_ffn_ln3_outputs
+  };
+
+  // --- Decoder Stage 6: Output Projection & Vocabulary Softmax ---
+  const DEFAULT_VOCABULARY = ['cat', 'chased', 'dog', 'ran', 'slowly', 'the', '<eos>', 'mouse', 'barks', 'fast'];
+  const vocabSize = DEFAULT_VOCABULARY.length;
+
+  const W_vocab = getInteractiveWeights2D('W_vocab', dModelVal, vocabSize, lectureWeights);
+  const b_vocab = getInteractiveBias1D('b_vocab', vocabSize, lectureWeights);
+
+  const dec_finalOutput = dec_ffn_ln3_outputs;
+  const dec_logits = matmul(dec_finalOutput, W_vocab).map((row) =>
+    row.map((v, c) => v + (b_vocab[c] ?? 0))
+  );
+
+  const dec_probabilities = softmaxRows(dec_logits);
+
+  const lastPos = Math.max(0, decoderSentence.length - 1);
+  const lastProbs = dec_probabilities[lastPos] ?? new Array(vocabSize).fill(1 / vocabSize);
+
+  let maxIdx = 0;
+  for (let v = 1; v < vocabSize; v++) {
+    if ((lastProbs[v] ?? 0) > (lastProbs[maxIdx] ?? 0)) {
+      maxIdx = v;
+    }
+  }
+
+  const dec_topK = DEFAULT_VOCABULARY.map((token, index) => ({
+    token,
+    prob: lastProbs[index] ?? 0,
+    index
+  }))
+    .sort((a, b) => b.prob - a.prob)
+    .slice(0, 5);
+
+  decoderState.finalOutput = dec_finalOutput;
+  decoderState.vocabProjection = {
+    logits: dec_logits,
+    probabilities: dec_probabilities,
+    predictedIndex: maxIdx,
+    predictedToken: DEFAULT_VOCABULARY[maxIdx] ?? '<unk>',
+    topK: dec_topK,
+    vocabulary: DEFAULT_VOCABULARY
+  };
+
   return {
     embeds,
     pes,
@@ -513,7 +743,8 @@ export function computeAttentionPipeline({
 }
 
 export function getInteractiveWeights2D(weightKey, inDim, outDim, lectureWeights) {
-  const baseW = lectureWeights?.[weightKey];
+  const fallbackKey = weightKey.endsWith('_dec') ? weightKey.replace('_dec', '') : weightKey;
+  const baseW = lectureWeights?.[weightKey] ?? lectureWeights?.[fallbackKey];
   if (!baseW || !baseW.length || !baseW[0].length) {
     return Array.from({ length: inDim }, (_, i) =>
       Array.from({ length: outDim }, (_, j) => (i === j ? 1.0 : 0.0))
@@ -537,7 +768,8 @@ export function getInteractiveWeights2D(weightKey, inDim, outDim, lectureWeights
 }
 
 export function getInteractiveBias1D(biasKey, outDim, lectureWeights) {
-  const baseB = lectureWeights?.[biasKey];
+  const fallbackKey = biasKey.endsWith('_dec') ? biasKey.replace('_dec', '') : biasKey;
+  const baseB = lectureWeights?.[biasKey] ?? lectureWeights?.[fallbackKey];
   if (!baseB || !baseB.length) return new Array(outDim).fill(0);
   const baseSize = baseB.length;
   if (baseSize === outDim) return baseB;

@@ -86,7 +86,14 @@
     lectureWeights
   });
 
-  $: activePipeline = isDecoderStream ? interactiveData?.decoder : interactiveData;
+  $: stream = $currentScene?.config?.stream ?? 'encoder';
+  $: attentionType = $currentScene?.config?.attentionType ?? 'self';
+  $: isDecoderStream = stream === 'decoder';
+  $: isCrossAttention = attentionType === 'cross';
+
+  $: activePipeline = isCrossAttention
+    ? interactiveData?.decoder?.crossAttention
+    : (isDecoderStream ? interactiveData?.decoder : interactiveData);
 
   // Resolve input matrix: Q for split-heads, Concatenated Weighted Sum for concat
   $: precomputedWS = $forwardPassData?.stages?.find((s) => s.id === 'weighted-sum')?.tokenVectors ?? [];
