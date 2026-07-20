@@ -2533,6 +2533,985 @@ export const SCENE_COPY = {
       ]
     }
   },
+  'dec-proj-q': {
+    eyebrow: 'Decoder Self-Attention · Query Projection',
+    title: 'Decoder Projection to Q',
+    fourQuestions: {
+      whatIsHappening: 'The decoder positional representations X_dec_pe are multiplied by weight matrix W_q_dec to produce Query vectors for the target sequence.',
+      why: 'Query vectors represent what each target token is asking or searching for within the target sequence context.',
+      whatChanged: 'Input matrix [target_seq_len, d_model] is linearly projected to Query matrix Q_dec of shape [target_seq_len, d_model].',
+      whatToObserve: 'Observe how each target token is projected through W_q_dec into a specialized Query vector.'
+    },
+    body: {
+      beginner: 'To let words in the target sentence talk to each other, each word first creates a "Query" vector — a list of questions that the word is asking about surrounding target words.',
+      mtech: 'The decoder input X_dec_pe ∈ R^(L_dec × d_model) is multiplied by learned weight matrix W_(q,dec) ∈ R^(d_model × d_model), producing Query matrix Q_dec ∈ R^(L_dec × d_model).',
+      research: 'Linear projection into Query space allows the network to learn a parameter-driven subspace for target self-attention matching, parameterized by W_q ∈ R^(d_model × d_model).'
+    },
+    deepDive: {
+      math: 'Q_{\\text{dec}} = X_{\\text{dec\\_pe}} W_{q,\\text{dec}} + b_{q,\\text{dec}}',
+      complexity: 'O(L_{\\text{dec}} \\cdot d_{\\text{model}}^2) floating point operations.',
+      matrixEquivalence: 'Linear projection maps each token vector row independently from model space to query space.',
+      misconceptions: [
+        'Query projection in decoder self-attention uses target tokens, unlike cross-attention queries which use decoder outputs and keys from the encoder.'
+      ],
+      notes: 'd_model = 16 in this visualization; production LLMs use 4096-12288.'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why project to Query space instead of using raw embeddings?',
+          body: 'Raw embeddings carry general word identity. Projecting through W_q creates a specialized vector representation focused specifically on what information this token needs from target context.'
+        }
+      ],
+      example: {
+        left: [0.3, -0.1, 0.5],
+        right: [0.8, 0.2, -0.4],
+        caption: 'Target embedding transformed by W_q into a Query vector.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Decoder Input X_dec_pe', shape: null },
+      after: { label: 'Decoder Queries Q_dec', shape: null },
+      whatChanged: 'Target representations mapped into the Query subspace.',
+      structured: {
+        entered: 'Decoder input matrix of shape [target_seq_len, d_model].',
+        happened: 'Matrix multiplication with W_q_dec plus bias b_q.',
+        changed: 'Dense input vectors transformed into Query space vectors.',
+        leaves: 'Query matrix Q_dec of shape [target_seq_len, d_model].'
+      }
+    },
+    quickCheck: {
+      question: 'Which weight matrix is used to compute Decoder Self-Attention Queries?',
+      choices: [
+        'W_q_dec of shape [d_model, d_model]',
+        'W_k_dec of shape [d_model, d_model]',
+        'W_v_dec of shape [d_model, d_model]',
+        'Wo_dec of shape [d_model, d_model]'
+      ],
+      correctIndex: 0,
+      explanation: 'W_q_dec maps input token vectors to Query vectors.',
+      transition: 'Now let\'s compute the Key vectors for the decoder sequence.',
+      distractorNotes: {
+        1: 'Incorrect. W_k_dec creates Key vectors.',
+        2: 'Incorrect. W_v_dec creates Value vectors.',
+        3: 'Incorrect. Wo_dec projects the final concatenated attention output.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-proj-q', code: 'Q_dec = self.W_q(dec_input)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-proj-q', tex: 'Q_{\\text{dec}} = X_{\\text{dec\\_pe}} W_{q,\\text{dec}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-proj-q', equationTermId: 'eq-dec-proj-q', codeLineId: 'code-dec-proj-q' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain Decoder Query projection.',
+        script: 'We multiply the decoder input vectors by W_q_dec to produce Query vectors Q_dec. These vectors represent what each target token needs from previous tokens.',
+        audienceQuestion: 'Are decoder queries computed for all target tokens at once during training?',
+        expectedAnswer: 'Yes, during training all target token queries are computed in parallel.',
+        misconception: 'Clarify that decoder self-attention queries operate on target sequence tokens.',
+        transition: 'Next, let\'s project target tokens to Keys.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Point out that Q_dec is the first of three linear projections in self-attention.'],
+      misconceptions: ['Decoder self-attention uses target sequence tokens for Q, K, and V.']
+    }
+  },
+  'dec-proj-k': {
+    eyebrow: 'Decoder Self-Attention · Key Projection',
+    title: 'Decoder Projection to K',
+    fourQuestions: {
+      whatIsHappening: 'The decoder input X_dec_pe is multiplied by weight matrix W_k_dec to produce Key vectors K_dec for the target sequence.',
+      why: 'Key vectors represent the information or attributes that each target token offers to answer incoming queries.',
+      whatChanged: 'Input matrix [target_seq_len, d_model] is linearly projected to Key matrix K_dec of shape [target_seq_len, d_model].',
+      whatToObserve: 'Watch each target token pass through W_k_dec to materialize its corresponding Key vector.'
+    },
+    body: {
+      beginner: 'Every word in the target sentence also creates a "Key" vector — the answers or index tags that other words check against.',
+      mtech: 'K_dec = X_dec_pe W_(k,dec) + b_(k,dec) ∈ R^(L_dec × d_model). Key vectors encode feature keys used during dot-product attention.',
+      research: 'Key projection maps target representations into a matching space compatible with Query vectors, enabling dot-product affinity scoring.'
+    },
+    deepDive: {
+      math: 'K_{\\text{dec}} = X_{\\text{dec\\_pe}} W_{k,\\text{dec}} + b_{k,\\text{dec}}',
+      complexity: 'O(L_{\\text{dec}} \\cdot d_{\\text{model}}^2) FLOPs.',
+      matrixEquivalence: 'Linear transformation of input rows by W_k_dec.',
+      misconceptions: [
+        'Decoder self-attention Keys come from the target sequence, whereas cross-attention Keys come from the encoder.'
+      ],
+      notes: 'Shape: [target_seq_len, d_model].'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do we need separate Query and Key matrices?',
+          body: 'If Q and K were the same, attention would be symmetric (word A attending to B would equal B attending to A). Separate Q and K projections allow asymmetric relationships, where A can look for B without B needing to look for A.'
+        }
+      ],
+      example: {
+        left: [0.1, 0.4, -0.2],
+        right: [-0.3, 0.6, 0.1],
+        caption: 'Target input converted by W_k into a Key vector.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Decoder Input X_dec_pe', shape: null },
+      after: { label: 'Decoder Keys K_dec', shape: null },
+      whatChanged: 'Target representations projected to Key space.',
+      structured: {
+        entered: 'Decoder input matrix of shape [target_seq_len, d_model].',
+        happened: 'Matrix multiplication with W_k_dec.',
+        changed: 'Dense input vectors transformed into Key vectors.',
+        leaves: 'Key matrix K_dec of shape [target_seq_len, d_model].'
+      }
+    },
+    quickCheck: {
+      question: 'What role do Key vectors play in Decoder Self-Attention?',
+      choices: [
+        'They act as tags/labels that Queries are matched against via dot product.',
+        'They contain the final output text probabilities.',
+        'They normalize activation variances.',
+        'They compress sequence length to 1.'
+      ],
+      correctIndex: 0,
+      explanation: 'Queries are multiplied with Keys to calculate dot-product attention scores.',
+      transition: 'Now let\'s project the Value vectors for the decoder sequence.',
+      distractorNotes: {
+        1: 'Incorrect. Softmax projection computes output probabilities.',
+        2: 'Incorrect. LayerNorm normalizes variances.',
+        3: 'Incorrect. Sequence length is preserved.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-proj-k', code: 'K_dec = self.W_k(dec_input)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-proj-k', tex: 'K_{\\text{dec}} = X_{\\text{dec\\_pe}} W_{k,\\text{dec}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-proj-k', equationTermId: 'eq-dec-proj-k', codeLineId: 'code-dec-proj-k' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain Decoder Key projection.',
+        script: 'We project target tokens through W_k_dec into Key vectors K_dec. Keys act as index labels for matching against Queries.',
+        audienceQuestion: 'Are Key vectors the same size as Query vectors?',
+        expectedAnswer: 'Yes, both have dimension d_model.',
+        misconception: 'Remind students that Q and K must have matching feature dimensions for dot products.',
+        transition: 'Next, let\'s create the Value vectors.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Emphasize that Q and K live in compatible spaces so their dot product is meaningful.'],
+      misconceptions: ['Decoder self-attention Keys are distinct from encoder cross-attention Keys.']
+    }
+  },
+  'dec-proj-v': {
+    eyebrow: 'Decoder Self-Attention · Value Projection',
+    title: 'Decoder Projection to V',
+    fourQuestions: {
+      whatIsHappening: 'The decoder input X_dec_pe is multiplied by weight matrix W_v_dec to produce Value vectors V_dec for the target sequence.',
+      why: 'Value vectors contain the actual semantic content that will be extracted and weighted during attention blending.',
+      whatChanged: 'Input matrix [target_seq_len, d_model] is linearly projected to Value matrix V_dec of shape [target_seq_len, d_model].',
+      whatToObserve: 'Observe each target token transform through W_v_dec into a Value vector.'
+    },
+    body: {
+      beginner: 'Finally, each target word creates a "Value" vector — the actual content that gets passed along after attention weights decide how much focus to give each word.',
+      mtech: 'V_dec = X_dec_pe W_(v,dec) + b_(v,dec) ∈ R^(L_dec × d_model). Value vectors hold the contextual payload.',
+      research: 'Value projection decouples the attention matching mechanism (Q, K) from the information payload (V), enabling flexible feature routing.'
+    },
+    deepDive: {
+      math: 'V_{\\text{dec}} = X_{\\text{dec\\_pe}} W_{v,\\text{dec}} + b_{v,\\text{dec}}',
+      complexity: 'O(L_{\\text{dec}} \\cdot d_{\\text{model}}^2) FLOPs.',
+      matrixEquivalence: 'Linear transformation of input rows by W_v_dec.',
+      misconceptions: [
+        'Value vectors are not attention weights — attention weights multiply Value vectors.'
+      ],
+      notes: 'Shape: [target_seq_len, d_model].'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why separate Value vectors from Key vectors?',
+          body: 'Keys are optimized for matching (answering "should I pay attention to this?"), whereas Values are optimized for representation (answering "what information should I send?"). Separating them gives the model much greater expressive power.'
+        }
+      ],
+      example: {
+        left: [-0.2, 0.5, 0.1],
+        right: [0.4, -0.3, 0.7],
+        caption: 'Target input transformed by W_v into a Value vector.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Decoder Input X_dec_pe', shape: null },
+      after: { label: 'Decoder Values V_dec', shape: null },
+      whatChanged: 'Target representations projected to Value space.',
+      structured: {
+        entered: 'Decoder input matrix of shape [target_seq_len, d_model].',
+        happened: 'Matrix multiplication with W_v_dec.',
+        changed: 'Dense input vectors transformed into Value vectors.',
+        leaves: 'Value matrix V_dec of shape [target_seq_len, d_model].'
+      }
+    },
+    quickCheck: {
+      question: 'What is the primary function of Value vectors in Decoder Self-Attention?',
+      choices: [
+        'They hold the content that gets weighted and summed to form the attention output.',
+        'They determine the causal mask pattern.',
+        'They normalize token features across sequence length.',
+        'They compute vocabulary logits.'
+      ],
+      correctIndex: 0,
+      explanation: 'Attention probabilities multiply Value vectors to produce the weighted sum output.',
+      transition: 'Now we have Q, K, and V. Let\'s split them into multiple heads!',
+      distractorNotes: {
+        1: 'Incorrect. Causal masks are fixed lower-triangular matrices.',
+        2: 'Incorrect. LayerNorm normalizes features.',
+        3: 'Incorrect. Vocabulary projection computes logits.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-proj-v', code: 'V_dec = self.W_v(dec_input)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-proj-v', tex: 'V_{\\text{dec}} = X_{\\text{dec\\_pe}} W_{v,\\text{dec}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-proj-v', equationTermId: 'eq-dec-proj-v', codeLineId: 'code-dec-proj-v' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain Decoder Value projection.',
+        script: 'We project target tokens through W_v_dec into Value vectors V_dec. These vectors hold the semantic content to be retrieved.',
+        audienceQuestion: 'Are Q, K, and V projected using three separate weight matrices?',
+        expectedAnswer: 'Yes: W_q, W_k, and W_v.',
+        misconception: 'Ensure students understand that Q, K, and V are distinct projections from the same input.',
+        transition: 'Next, let\'s split Q, K, and V into multiple attention heads.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Reiterate the Q/K/V analogy: Q = query, K = key/index, V = value/content.'],
+      misconceptions: ['Value vectors hold representations, not attention scores.']
+    }
+  },
+  'dec-split-heads': {
+    eyebrow: 'Decoder Self-Attention · Head Splitting',
+    title: 'Decoder Split Heads',
+    fourQuestions: {
+      whatIsHappening: 'The Query, Key, and Value matrices of shape [target_seq_len, d_model] are reshaped and transposed into num_heads separate tensors of shape [target_seq_len, d_k].',
+      why: 'Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions.',
+      whatChanged: 'Tensors go from [target_seq_len, d_model] to [num_heads, target_seq_len, d_k], where d_k = d_model / num_heads.',
+      whatToObserve: 'Watch the single 16-dimensional matrix split into 4 parallel 4-dimensional head slices.'
+    },
+    body: {
+      beginner: 'Instead of using one big 16-number vector for attention, we split it into 4 smaller 4-number heads so each head can focus on a different type of relationship in the sentence.',
+      mtech: 'Q_dec, K_dec, V_dec ∈ R^(L × d_model) → reshape → R^(L × h × d_k) → transpose → R^(h × L × d_k).',
+      research: 'Head splitting partitions d_model into h parallel d_k subspaces. Vaswani et al. (2017) set d_k = d_v = d_model / h = 64 for 8 heads in Transformer-base.'
+    },
+    deepDive: {
+      math: 'd_k = d_{\\text{model}} / h, \\quad Q_h \\in \\mathbb{R}^{h \\times L_{\\text{dec}} \\times d_k}',
+      complexity: 'O(1) memory view / zero-copy transpose in modern frameworks.',
+      matrixEquivalence: 'Reshaping and axis swapping without arithmetic operations.',
+      misconceptions: [
+        'Head splitting does not alter any numerical values; it simply changes tensor view dimensions.'
+      ],
+      notes: 'In this demo: h = 4 heads, d_k = 16 / 4 = 4.'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why use multiple smaller heads instead of one large head?',
+          body: 'A single attention head can only produce one attention pattern per token. Multi-head attention allows Head 1 to track subject-verb agreements while Head 2 tracks noun-modifier relationships, all in parallel.'
+        }
+      ],
+      example: {
+        left: [1, 16],
+        right: [4, 1, 4],
+        caption: '16-dim vector reshaped into 4 heads of size 4.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Un-split Matrix Q_dec', shape: null },
+      after: { label: 'Split Head Tensors Q_h', shape: null },
+      whatChanged: 'Reshaped and transposed into num_heads parallel head slices.',
+      structured: {
+        entered: 'Q, K, V matrices of shape [target_seq_len, d_model].',
+        happened: 'Reshape to [target_seq_len, num_heads, d_k] and transpose dimensions.',
+        changed: 'Single wide representation split into parallel head channels.',
+        leaves: 'Head tensors of shape [num_heads, target_seq_len, d_k].'
+      }
+    },
+    quickCheck: {
+      question: 'If d_model = 16 and num_heads = 4, what is the head dimension d_k?',
+      choices: [
+        'd_k = 4 (because 16 / 4 = 4)',
+        'd_k = 16 (remains unchanged)',
+        'd_k = 64 (16 * 4)',
+        'd_k = 8 (16 / 2)'
+      ],
+      correctIndex: 0,
+      explanation: 'd_k = d_model / num_heads = 16 / 4 = 4.',
+      transition: 'Now let\'s compute the raw attention scores Q × Kᵀ for each head.',
+      distractorNotes: {
+        1: 'Incorrect. Un-split dimension is 16.',
+        2: 'Incorrect. Dimension is divided, not multiplied.',
+        3: 'Incorrect. 16 divided by 4 is 4, not 8.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-split-heads', code: 'Q_h = Q.view(B, L, h, d_k).transpose(1, 2)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-split-heads', tex: 'Q_h \\in \\mathbb{R}^{h \\times L_{\\text{dec}} \\times d_k}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-split-heads', equationTermId: 'eq-dec-split-heads', codeLineId: 'code-dec-split-heads' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain decoder head splitting.',
+        script: 'We reshape Q, K, and V from d_model into num_heads slices of dimension d_k. This lets 4 heads operate in parallel.',
+        audienceQuestion: 'Does head splitting require any mathematical multiplication?',
+        expectedAnswer: 'No, it is just a tensor reshape and transpose operation.',
+        misconception: 'Clarify that head splitting reorganizes tensor memory without changing values.',
+        transition: 'Next, we compute raw attention scores Q × Kᵀ.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Show how the 16 columns divide neatly into 4 groups of 4.'],
+      misconceptions: ['Splitting heads does not add parameters or compute; it reorganizes existing parameters.']
+    }
+  },
+  'dec-qk-matmul': {
+    eyebrow: 'Decoder Self-Attention · Raw Scores',
+    title: 'Decoder Q × Kᵀ (Raw Scores)',
+    fourQuestions: {
+      whatIsHappening: 'For each head, we multiply Query matrix Q_h by transposed Key matrix K_hᵀ and scale by 1/√d_k to get raw attention scores S.',
+      why: 'Dot products measure the similarity/affinity between each Query vector and every Key vector in the sequence.',
+      whatChanged: 'Tensors Q_h [L, d_k] and K_h [L, d_k] multiply to form a square score grid S of shape [target_seq_len, target_seq_len].',
+      whatToObserve: 'Observe the square matrix of raw dot product scores before any masking or softmax is applied.'
+    },
+    body: {
+      beginner: 'We multiply every Query by every Key to see how strongly each target word relates to every other target word.',
+      mtech: 'S_dec = (Q_h K_h^T) / sqrt(d_k) ∈ R^(L_dec × L_dec). Scaling by 1/sqrt(d_k) prevents dot products from growing excessively large for larger d_k.',
+      research: 'Scaled dot-product attention score computation. For large d_k, dot products grow in magnitude, pushing softmax into regions with extremely small gradients. Scaling counteracts this variance scaling.'
+    },
+    deepDive: {
+      math: 'S_{\\text{raw}} = \\frac{Q_h K_h^T}{\\sqrt{d_k}} \\in \\mathbb{R}^{L_{\\text{dec}} \\times L_{\\text{dec}}}',
+      complexity: 'O(h \\cdot L_{\\text{dec}}^2 \\cdot d_k) FLOPs.',
+      matrixEquivalence: 'Batch matrix multiplication of [L, d_k] by [d_k, L].',
+      misconceptions: [
+        'These are raw scores — notice that at this step, future tokens CAN still see past tokens in the grid until causal masking is applied next!'
+      ],
+      notes: 'Scaling factor = 1 / sqrt(4) = 0.5 in our d_k=4 setup.'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why scale dot products by 1 / sqrt(d_k)?',
+          body: 'Assuming Q and K have mean 0 and variance 1, their dot product has mean 0 and variance d_k. For large d_k, dot products become large in magnitude, causing softmax to saturate with near-zero gradients. Dividing by sqrt(d_k) pulls variance back to 1.'
+        }
+      ],
+      example: {
+        left: [2.0, -1.0],
+        right: [1.5, 3.0],
+        caption: 'Dot product = 0.0, scaled by 1/sqrt(4) = 0.5.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Query & Key Head Tensors', shape: null },
+      after: { label: 'Raw Score Grid S', shape: null },
+      whatChanged: 'Matrix multiplication produced an L × L grid of raw attention scores.',
+      structured: {
+        entered: 'Q_h and K_h of shape [L_dec, d_k].',
+        happened: 'Matmul Q_h * K_h^T divided by sqrt(d_k).',
+        changed: 'Vector pairs converted to pairwise scalar affinity scores.',
+        leaves: 'Square raw score matrix of shape [target_seq_len, target_seq_len].'
+      }
+    },
+    quickCheck: {
+      question: 'Why do we scale dot product scores by 1 / sqrt(d_k)?',
+      choices: [
+        'To prevent large values from saturating the Softmax and causing vanishing gradients.',
+        'To apply causal masking to future tokens.',
+        'To convert negative numbers to positive numbers.',
+        'To reduce the sequence length.'
+      ],
+      correctIndex: 0,
+      explanation: 'Scaling by 1 / sqrt(d_k) keeps score variance at 1, preventing Softmax saturation.',
+      transition: 'Now comes the critical decoder step: Causal Masking!',
+      distractorNotes: {
+        1: 'Incorrect. Causal masking is a separate step added next.',
+        2: 'Incorrect. Softmax exponentiation handles negative numbers.',
+        3: 'Incorrect. Sequence length is unchanged.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-qk-matmul', code: 'scores = torch.matmul(Q_h, K_h.transpose(-2, -1)) / math.sqrt(d_k)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-qk-matmul', tex: 'S_{\\text{dec}} = \\frac{Q_h K_h^T}{\\sqrt{d_k}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-qk-matmul', equationTermId: 'eq-dec-qk-matmul', codeLineId: 'code-dec-qk-matmul' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain raw Q × Kᵀ matmul in decoder.',
+        script: 'We multiply Q_h by K_h transposed and divide by sqrt(d_k). This creates a square grid of raw similarity scores between all target tokens.',
+        audienceQuestion: 'Can tokens see future tokens in this raw score matrix?',
+        expectedAnswer: 'Yes! In this raw grid, upper-triangle scores still exist until we apply causal masking next.',
+        misconception: 'Highlight that raw matmul has not masked future tokens yet.',
+        transition: 'Next, let\'s apply Causal Masking to enforce auto-regressive generation.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Point to the upper-right triangle values in the heatmap before masking.'],
+      misconceptions: ['Causal masking is NOT applied inside the matmul itself; it is applied immediately after matmul.']
+    }
+  },
+  'dec-causal-mask': {
+    eyebrow: 'Decoder Self-Attention · Causal Masking',
+    title: 'Causal Masking (Lower Δ)',
+    fourQuestions: {
+      whatIsHappening: 'We add -infinity (or -1e9) to all upper-triangular elements of the score matrix (where col > row).',
+      why: 'To prevent target token i from attending to future target tokens j > i, preserving auto-regressive causality during generation and training.',
+      whatChanged: 'All entries in the upper triangle (col > row) become -inf; lower triangle (col <= row) remains unchanged.',
+      whatToObserve: 'Watch the upper triangle of the heatmap turn dark/masked as -inf values are injected.'
+    },
+    body: {
+      beginner: 'When predicting the next word, you cannot cheat by looking into the future! Causal masking blocks all future words by setting their score to negative infinity (-∞), which Softmax turns into 0% attention.',
+      mtech: 'S_masked[i, j] = S[i, j] if j ≤ i else -∞. In practice, an upper-triangular mask matrix M with -∞ is added element-wise: S_masked = S + M.',
+      research: 'Causal (autoregressive) masking enforces the conditional independence property P(y_t | y_<t, X). In PyTorch, nn.TransformerDecoder uses torch.triu(..., diagonal=1) filled with float("-inf").'
+    },
+    deepDive: {
+      math: 'M_{i,j} = \\begin{cases} 0 & \\text{if } j \\le i \\\\ -\\infty & \\text{if } j > i \\end{cases}, \\quad S_{\\text{masked}} = S + M',
+      complexity: 'O(L_{\\text{dec}}^2) element-wise mask addition.',
+      matrixEquivalence: 'Lower-triangular mask addition forcing e^{-\\infty} = 0 in Softmax.',
+      misconceptions: [
+        'Causal masking is only used in decoder self-attention. Encoder self-attention and decoder cross-attention do NOT use causal masking.'
+      ],
+      notes: 'Lower triangular matrix keeps entries on and below the main diagonal.'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why use -infinity instead of 0 for masking?',
+          body: 'Because Softmax exponentiates its inputs (e^x). e^0 = 1, which would still give future tokens attention weight! But e^(-inf) = 0, which guarantees future tokens get exactly 0.0 attention weight after Softmax.'
+        }
+      ],
+      example: {
+        left: [[1.2, 0.8], [0.5, 1.1]],
+        right: [[1.2, -1e9], [0.5, 1.1]],
+        caption: 'Upper-triangle entry (row 0, col 1) set to -inf.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Raw Unmasked Scores S', shape: null },
+      after: { label: 'Causally Masked Scores S_masked', shape: null },
+      whatChanged: 'Upper triangle (future tokens) set to -infinity.',
+      structured: {
+        entered: 'Square score matrix of shape [target_seq_len, target_seq_len].',
+        happened: 'Upper-triangular mask M added (-inf where col > row).',
+        changed: 'Future token positions blocked from receiving attention.',
+        leaves: 'Causally masked score matrix with lower triangular non-inf values.'
+      }
+    },
+    quickCheck: {
+      question: 'Why is -infinity used for causal masking instead of 0?',
+      choices: [
+        'Because e^(-inf) = 0 in Softmax, ensuring future tokens get exactly 0% attention weight.',
+        'Because 0 is reserved for diagonal elements.',
+        'Because matrix multiplication requires negative numbers.',
+        'To reduce floating point precision requirements.'
+      ],
+      correctIndex: 0,
+      explanation: 'Softmax exponentiates inputs: e^(-inf) = 0, guaranteeing zero attention weight for future tokens.',
+      transition: 'Now let\'s apply Softmax to convert masked scores into probabilities.',
+      distractorNotes: {
+        1: 'Incorrect. Diagonal elements contain real dot products.',
+        2: 'Incorrect. Matmul works with any real numbers.',
+        3: 'Incorrect. Precision is unaffected.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-causal-mask', code: 'mask = torch.triu(torch.full((L, L), float("-inf")), diagonal=1)\nscores = scores + mask' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-causal-mask', tex: 'S_{\\text{masked}} = S + M, \\quad M_{i,j} = \\begin{cases} 0 & j \\le i \\\\ -\\infty & j > i \\end{cases}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-causal-mask', equationTermId: 'eq-dec-causal-mask', codeLineId: 'code-dec-causal-mask' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain Causal Masking in the decoder.',
+        script: 'We add -infinity to all upper-triangle positions where col > row. This prevents any token from looking at future words during training or generation.',
+        audienceQuestion: 'Does the first token ("<sos>") see any other target tokens?',
+        expectedAnswer: 'No! The first token can only see itself.',
+        misconception: 'Highlight that row 0 has all future columns masked to -inf.',
+        transition: 'Next, we run Softmax to turn these scores into attention weights.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Point to row 0: only col 0 is unmasked. Point to row 1: col 0 and col 1 are unmasked.'],
+      misconceptions: ['Causal masking is NOT used in Encoder self-attention or Cross-attention.']
+    }
+  },
+  'dec-scale-softmax': {
+    eyebrow: 'Decoder Self-Attention · Masked Softmax',
+    title: 'Decoder Masked Softmax',
+    fourQuestions: {
+      whatIsHappening: 'Softmax is applied row-wise to the causally masked score matrix: A_dec[i] = softmax(S_masked[i]).',
+      why: 'Softmax converts raw scores into a valid probability distribution where each row sums to 1.0, with future tokens receiving 0.0 weight.',
+      whatChanged: 'Masked score grid S_masked is transformed into attention weight matrix A_dec of shape [target_seq_len, target_seq_len].',
+      whatToObserve: 'Observe how all upper-triangle entries become 0.0%, while valid past positions sum to 100% (1.0) per row.'
+    },
+    body: {
+      beginner: 'Softmax turns scores into percentages. Because future words had a score of -∞, their percentage is exactly 0%. Each row now adds up to 100% across available past words!',
+      mtech: 'A_dec = softmax(S_masked, dim=-1). For row i, ∑_(j=0)^(i) A[i,j] = 1.0, and A[i,j] = 0 ∀ j > i.',
+      research: 'Row-wise Softmax over causally masked dot-product scores. Exp-normalize formulation e^(S_(i,j)) / ∑_k e^(S_(i,k)) naturally zeroes out masked positions due to e^(-∞) = 0.'
+    },
+    deepDive: {
+      math: 'A_{\\text{dec}}[i, j] = \\frac{e^{S_{\\text{masked}}[i, j]}}{\\sum_{k=0}^{L-1} e^{S_{\\text{masked}}[i, k]}}',
+      complexity: 'O(h \\cdot L_{\\text{dec}}^2) exponentiations and divisions.',
+      matrixEquivalence: 'Row-wise normalization producing lower-triangular stochastic matrix.',
+      misconceptions: [
+        'Each row sums to 1.0 independently — token 0 has 100% on itself, token 1 splits 100% between token 0 and token 1.'
+      ],
+      notes: 'Lower triangular probability matrix.'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why must attention weights sum to 1.0 for each row?',
+          body: 'Summing to 1.0 ensures that the resulting weighted average of Value vectors preserves scale. If weights summed to more or less than 1.0, vector magnitudes would explode or shrink as signals pass through layers.'
+        }
+      ],
+      example: {
+        left: [1.2, -1e9],
+        right: [1.0, 0.0],
+        caption: 'Softmax converts [1.2, -inf] to [1.0, 0.0].'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Causally Masked Scores S_masked', shape: null },
+      after: { label: 'Softmax Attention Weights A_dec', shape: null },
+      whatChanged: 'Raw scores converted to row-wise probabilities summing to 1.0.',
+      structured: {
+        entered: 'Causally masked score matrix.',
+        happened: 'Row-wise exponentiation and sum normalization.',
+        changed: 'Negative infinity entries become 0.0; valid past entries sum to 1.0 per row.',
+        leaves: 'Lower-triangular attention probability matrix A_dec.'
+      }
+    },
+    quickCheck: {
+      question: 'What is the attention weight for a future token (where col > row) after Masked Softmax?',
+      choices: [
+        'Exactly 0.0 (because e^-inf = 0)',
+        '0.5 (equal probability)',
+        '1.0 (maximum weight)',
+        '-1.0 (negative weight)'
+      ],
+      correctIndex: 0,
+      explanation: 'Exponentiating -infinity yields e^-inf = 0, giving future tokens exactly 0.0 weight.',
+      transition: 'Now we use these attention weights to blend the Value vectors!',
+      distractorNotes: {
+        1: 'Incorrect. Future tokens receive no weight.',
+        2: 'Incorrect. Max weight goes to valid tokens.',
+        3: 'Incorrect. Softmax outputs are strictly non-negative probabilities [0, 1].'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-scale-softmax', code: 'attn_weights = F.softmax(scores, dim=-1)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-scale-softmax', tex: 'A_{\\text{dec}} = \\text{softmax}(S_{\\text{masked}})' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-scale-softmax', equationTermId: 'eq-dec-scale-softmax', codeLineId: 'code-dec-scale-softmax' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain decoder masked Softmax.',
+        script: 'Softmax normalizes each row into a probability distribution. Future tokens receive 0% weight, while past tokens split 100% of the attention.',
+        audienceQuestion: 'What is the sum of attention weights in each row?',
+        expectedAnswer: 'Exactly 1.0 (100%).',
+        misconception: 'Confirm that row 0 puts 100% weight on itself because all other columns are masked.',
+        transition: 'Next, we compute the Weighted Sum with Value vectors.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Highlight row 0: 100% on col 0. Row 1: splits 100% between col 0 and col 1.'],
+      misconceptions: ['Softmax probabilities are always between 0.0 and 1.0.']
+    }
+  },
+  'dec-weighted-sum': {
+    eyebrow: 'Decoder Self-Attention · Weighted Sum',
+    title: 'Decoder Weighted Sum',
+    fourQuestions: {
+      whatIsHappening: 'For each head, we multiply the attention probability matrix A_dec by the Value matrix V_h to compute head output O_h = A_dec * V_h.',
+      why: 'This blends past target token Value vectors according to their attention weights, creating context-enriched representations.',
+      whatChanged: 'Attention matrix [L, L] multiplies Value matrix [L, d_k] to produce head output O_h of shape [target_seq_len, d_k].',
+      whatToObserve: 'Watch each target token collect a weighted combination of Value vectors from itself and prior target tokens.'
+    },
+    body: {
+      beginner: 'We use the attention percentages to mix together the Value vectors of past words. Each target word receives a custom cocktail of information from preceding words!',
+      mtech: 'O_h = A_dec V_h ∈ R^(L_dec × d_k). For position i, O_h[i] = ∑_(j=0)^(i) A[i,j] V_h[j].',
+      research: 'Linear combination of Value vectors weighted by causally masked self-attention probabilities. Produces context-aware target representations restricted to historical tokens.'
+    },
+    deepDive: {
+      math: 'O_h = A_{\\text{dec}} V_h \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_k}',
+      complexity: 'O(h \\cdot L_{\\text{dec}}^2 \\cdot d_k) FLOPs.',
+      matrixEquivalence: 'Matrix multiplication contracting the sequence dimension L.',
+      misconceptions: [
+        'Each target token vector only contains information from current and past target tokens — never future tokens.'
+      ],
+      notes: 'Head output shape: [target_seq_len, d_k].'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why is the output vector for token 0 identical to Value vector 0?',
+          body: 'Because token 0 can only attend to itself (100% weight on position 0), its weighted sum is 1.0 * V[0] = V[0]. Token 1 can mix V[0] and V[1], and so on!'
+        }
+      ],
+      example: {
+        left: [1.0, 0.0],
+        right: [[0.4, 0.2], [0.8, -0.1]],
+        caption: 'Row 0 weights [1.0, 0.0] pick out row 0 of V.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Attention Weights A & Values V', shape: null },
+      after: { label: 'Contextual Head Output O_h', shape: null },
+      whatChanged: 'Value vectors blended according to causal attention weights.',
+      structured: {
+        entered: 'Attention matrix [L, L] and Value matrix [L, d_k].',
+        happened: 'Matrix multiplication O_h = A * V_h.',
+        changed: 'Un-contextualized Values blended into causally context-aware vectors.',
+        leaves: 'Head output matrix O_h of shape [target_seq_len, d_k].'
+      }
+    },
+    quickCheck: {
+      question: 'Which vectors are multiplied by the decoder self-attention weights A_dec?',
+      choices: [
+        'Decoder Value vectors V_dec',
+        'Decoder Query vectors Q_dec',
+        'Encoder Key vectors K_enc',
+        'Positional Encoding vectors'
+      ],
+      correctIndex: 0,
+      explanation: 'Attention weights A_dec multiply Decoder Value vectors V_dec to form the weighted sum.',
+      transition: 'Now let\'s compare all 4 decoder self-attention heads!',
+      distractorNotes: {
+        1: 'Incorrect. Queries compute dot products with Keys.',
+        2: 'Incorrect. Encoder keys belong to cross-attention.',
+        3: 'Incorrect. Positional encodings are added at the input.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-weighted-sum', code: 'head_out = torch.matmul(attn_weights, V_h)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-weighted-sum', tex: 'O_h = A_{\\text{dec}} V_h' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-weighted-sum', equationTermId: 'eq-dec-weighted-sum', codeLineId: 'code-dec-weighted-sum' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain decoder weighted sum.',
+        script: 'We multiply attention weights A_dec by Value vectors V_h. Each token position receives a weighted mix of past Value vectors.',
+        audienceQuestion: 'Does token 0 receive information from token 1?',
+        expectedAnswer: 'No, token 0 only receives information from itself.',
+        misconception: 'Confirm that information flows only from past positions to current positions.',
+        transition: 'Next, let\'s compare all attention heads side-by-side.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Point out that row 0 output equals V[0], while row 1 output mixes V[0] and V[1].'],
+      misconceptions: ['Weighted sum contracts sequence columns, resulting in shape [L, d_k].']
+    }
+  },
+  'dec-heads-compare': {
+    eyebrow: 'Decoder Self-Attention · Head Comparison',
+    title: 'Decoder Attention Heads',
+    fourQuestions: {
+      whatIsHappening: 'We compare the causally masked attention heatmaps across all num_heads parallel attention heads.',
+      why: 'Each head learns distinct causal relationships (e.g., immediate previous word, start token anchor, grammatical dependencies).',
+      whatChanged: 'Allows side-by-side inspection of num_heads distinct lower-triangular attention distributions.',
+      whatToObserve: 'Observe how all heads respect the causal mask (upper triangle is 0), but place high attention on different past tokens.'
+    },
+    body: {
+      beginner: 'Comparing the 4 decoder heads shows how each head pays attention to different past words. Head 1 might focus on the word right before it, while Head 2 focuses on the start of the sentence!',
+      mtech: 'Multi-head decoder self-attention provides h independent causal attention distributions A^(1), ..., A^(h).',
+      research: 'Empirical analysis of decoder self-attention heads reveals specialized roles: positional offset heads (attending to t-1), global anchor heads (attending to <sos>), and semantic agreement heads.'
+    },
+    deepDive: {
+      math: 'A^{(h)} = \\text{softmax}\\left(\\frac{Q^{(h)} K^{(h)T}}{\\sqrt{d_k}} + M\\right)',
+      complexity: 'O(h \\cdot L_{\\text{dec}}^2) parallel attention patterns.',
+      matrixEquivalence: 'Parallel evaluation of h lower-triangular stochastic matrices.',
+      misconceptions: [
+        'All heads enforce causal masking (upper triangle zero), but their non-zero lower triangle weights differ.'
+      ],
+      notes: '4 heads visualized simultaneously.'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why do different heads learn different attention patterns?',
+          body: 'Random initialization causes each head to project into different d_k subspaces. During backpropagation, gradients drive each head to specialize in capturing distinct syntactic or semantic dependencies.'
+        }
+      ],
+      example: {
+        left: 'Head 1: Focuses on t-1',
+        right: 'Head 2: Focuses on <sos>',
+        caption: 'Different decoder heads capture distinct temporal patterns.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Single Head View', shape: null },
+      after: { label: 'All 4 Decoder Heads View', shape: null },
+      whatChanged: 'Side-by-side comparison of 4 parallel decoder attention heads.',
+      structured: {
+        entered: 'Single head attention matrix.',
+        happened: 'Parallel rendering of all head attention heatmaps.',
+        changed: 'Multiple head specializations made visible simultaneously.',
+        leaves: '4 lower-triangular attention probability heatmaps.'
+      }
+    },
+    quickCheck: {
+      question: 'Do all decoder self-attention heads enforce causal masking?',
+      choices: [
+        'Yes, all decoder self-attention heads mask future tokens (upper triangle = 0).',
+        'No, only Head 0 is masked.',
+        'No, heads are unmasked during training.',
+        'Only heads 1 and 2 are masked.'
+      ],
+      correctIndex: 0,
+      explanation: 'Every decoder self-attention head applies the exact same causal mask to prevent looking into the future.',
+      transition: 'Now let\'s concatenate the outputs of all 4 heads back together!',
+      distractorNotes: {
+        1: 'Incorrect. All heads must enforce causality.',
+        2: 'Incorrect. Causal masking is active during both training and inference.',
+        3: 'Incorrect. Masking applies across all heads.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-heads-compare', code: '# Multi-head decoder self-attention weight comparison' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-heads-compare', tex: 'A^{(h)} = \\text{softmax}\\left(\\frac{Q^{(h)} K^{(h)T}}{\\sqrt{d_k}} + M\\right)' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-heads-compare', equationTermId: 'eq-dec-heads-compare', codeLineId: 'code-dec-heads-compare' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Compare decoder self-attention heads.',
+        script: 'Look at all 4 decoder attention heatmaps side-by-side. Notice how every head has its upper triangle zeroed out, but each head focuses on different past words.',
+        audienceQuestion: 'Do any heads look into the future?',
+        expectedAnswer: 'No, every head has the upper triangle masked to 0.',
+        misconception: 'Highlight that head diversity exists within the lower triangle.',
+        transition: 'Next, we concatenate the head outputs back together.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Point out how every heatmap has a clear diagonal edge due to causal masking.'],
+      misconceptions: ['All heads enforce causal masking equally.']
+    }
+  },
+  'dec-concat': {
+    eyebrow: 'Decoder Self-Attention · Concatenation',
+    title: 'Decoder Concatenation',
+    fourQuestions: {
+      whatIsHappening: 'The num_heads head outputs O_1, ..., O_h of shape [target_seq_len, d_k] are concatenated side-by-side along the feature dimension back into shape [target_seq_len, d_model].',
+      why: 'To combine the diverse contextual features extracted by all parallel attention heads into a single matrix of dimension d_model.',
+      whatChanged: '4 matrices of shape [target_seq_len, 4] are stitched together into one matrix of shape [target_seq_len, 16].',
+      whatToObserve: 'Watch the 4 separate 4-column head blocks merge side-by-side into a single 16-column matrix.'
+    },
+    body: {
+      beginner: 'We take the 4 smaller head outputs and stitch them back together side-by-side. 4 heads of size 4 become one full 16-number vector for each target word!',
+      mtech: 'Concat(O_1, ..., O_h) ∈ R^(L_dec × d_model), where h · d_k = d_model.',
+      research: 'Head concatenation restores the model dimension d_model prior to linear output projection Wo. Recombines multi-head subspace features into a unified tensor.'
+    },
+    deepDive: {
+      math: '\\text{Concat}(O_1, \\dots, O_h) \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_{\\text{model}}}',
+      complexity: 'O(1) memory view concatenation.',
+      matrixEquivalence: 'Stitching columns along dim=-1.',
+      misconceptions: [
+        'Concatenation places head outputs side-by-side; it does NOT sum them together.'
+      ],
+      notes: 'Shape: [target_seq_len, 16].'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why concatenate instead of averaging the head outputs?',
+          body: 'Concatenation preserves all information from every head independently without destroying feature channels. Averaging would blend all head channels together, losing the distinct insights each head learned.'
+        }
+      ],
+      example: {
+        left: '4 heads x 4 cols',
+        right: '1 matrix x 16 cols',
+        caption: 'Stitching head columns side-by-side.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Split Head Outputs O_1..O_4', shape: null },
+      after: { label: 'Concatenated Matrix', shape: null },
+      whatChanged: 'Head output matrices concatenated side-by-side into d_model columns.',
+      structured: {
+        entered: '4 head matrices of shape [target_seq_len, 4].',
+        happened: 'Concatenation along feature dimension dim=-1.',
+        changed: 'Parallel head channels combined into a single matrix.',
+        leaves: 'Concatenated matrix of shape [target_seq_len, 16].'
+      }
+    },
+    quickCheck: {
+      question: 'What is the tensor shape after concatenating 4 heads of dimension d_k = 4?',
+      choices: [
+        '[target_seq_len, 16] (because 4 * 4 = 16 = d_model)',
+        '[target_seq_len, 4]',
+        '[4, 4]',
+        '[16, 16]'
+      ],
+      correctIndex: 0,
+      explanation: 'Stitching 4 heads of width 4 produces a matrix of width 16 (d_model).',
+      transition: 'Now we pass this concatenated matrix through the Output Projection Wo_dec!',
+      distractorNotes: {
+        1: 'Incorrect. 4 is the single head dimension d_k.',
+        2: 'Incorrect. Head count and d_k pair.',
+        3: 'Incorrect. Square dimension.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-concat', code: 'concat_out = head_outputs.transpose(1, 2).contiguous().view(B, L, d_model)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-concat', tex: '\\text{Concat}(O_1, \\dots, O_h) \\in \\mathbb{R}^{L_{\\text{dec}} \\times d_{\\text{model}}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-concat', equationTermId: 'eq-dec-concat', codeLineId: 'code-dec-concat' }
+    ],
+    narration: [
+      {
+        duration: '~30s',
+        objective: 'Explain decoder head concatenation.',
+        script: 'We concatenate the outputs from all 4 attention heads side-by-side. 4 heads of width 4 form a full 16-dimensional vector for each word.',
+        audienceQuestion: 'Does concatenation add the numbers together?',
+        expectedAnswer: 'No, it places them side-by-side in columns.',
+        misconception: 'Confirm that concatenation joins columns without arithmetic addition.',
+        transition: 'Finally, we apply the linear Output Projection Wo_dec.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Show how columns 0-3 come from Head 1, 4-7 from Head 2, 8-11 from Head 3, 12-15 from Head 4.'],
+      misconceptions: ['Concatenation is a reshape/stitch operation, not an addition.']
+    }
+  },
+  'dec-output-proj': {
+    eyebrow: 'Decoder Self-Attention · Output Projection',
+    title: 'Decoder Output Projection',
+    fourQuestions: {
+      whatIsHappening: 'The concatenated multi-head output matrix is multiplied by weight matrix Wo_dec of shape [d_model, d_model] plus bias bo_dec.',
+      why: 'Wo_dec mixes the features from all attention heads together and projects them back into the decoder residual stream space.',
+      whatChanged: 'Concatenated matrix [target_seq_len, d_model] is linearly projected to final self-attention output O_dec of shape [target_seq_len, d_model].',
+      whatToObserve: 'Watch the concatenated head features pass through Wo_dec to form the final output of Decoder Masked Self-Attention.'
+    },
+    body: {
+      beginner: 'The final step in self-attention is multiplying by an Output Projection matrix (Wo). This blends the information from all 4 heads together into a final, polished vector for each target word.',
+      mtech: 'O_dec = Concat(O_1, ..., O_h) W_(o,dec) + b_(o,dec) ∈ R^(L_dec × d_model).',
+      research: 'Multi-head self-attention output projection: MultiHead(Q,K,V) = Concat(head_1, ..., head_h) W^O. Maps multi-head concatenated features into the residual stream.'
+    },
+    deepDive: {
+      math: 'O_{\\text{dec}} = \\text{Concat}(O_1, \\dots, O_h) W_{o,\\text{dec}} + b_{o,\\text{dec}}',
+      complexity: 'O(L_{\\text{dec}} \\cdot d_{\\text{model}}^2) FLOPs.',
+      matrixEquivalence: 'Linear transformation mixing concatenated head channels.',
+      misconceptions: [
+        'Wo_dec is an essential linear transformation that allows heads to interact — without Wo, head outputs would remain isolated channels.'
+      ],
+      notes: 'Final output shape: [target_seq_len, d_model].'
+    },
+    whyPanel: {
+      items: [
+        {
+          title: 'Why is the output projection Wo necessary after concatenation?',
+          body: 'Concatenation simply places head outputs side-by-side in separate columns. Wo linearly combines features across all heads, allowing the network to learn interactions between what Head 1 discovered and what Head 2 discovered.'
+        }
+      ],
+      example: {
+        left: [1, 16],
+        right: [1, 16],
+        caption: 'Concatenated vector multiplied by Wo matrix.'
+      }
+    },
+    beforeAfter: {
+      before: { label: 'Concatenated Head Matrix', shape: null },
+      after: { label: 'Decoder Self-Attention Output O_dec', shape: null },
+      whatChanged: 'Multi-head features linearly projected into final output vectors.',
+      structured: {
+        entered: 'Concatenated matrix of shape [target_seq_len, d_model].',
+        happened: 'Matrix multiplication with Wo_dec plus bias bo_dec.',
+        changed: 'Multi-head features mixed across channel dimensions.',
+        leaves: 'Final Masked Self-Attention output tensor of shape [target_seq_len, d_model].'
+      }
+    },
+    quickCheck: {
+      question: 'What is the purpose of the Output Projection matrix Wo_dec?',
+      choices: [
+        'To linearly mix features across all attention heads before adding to the residual stream.',
+        'To mask future target tokens.',
+        'To calculate token embeddings.',
+        'To compute Softmax probabilities.'
+      ],
+      correctIndex: 0,
+      explanation: 'Wo_dec allows features from different attention heads to interact and mix together.',
+      transition: 'Decoder Masked Self-Attention is complete! Next comes Decoder Residual Connection ①.',
+      distractorNotes: {
+        1: 'Incorrect. Causal masking masks future tokens.',
+        2: 'Incorrect. Embeddings convert token IDs.',
+        3: 'Incorrect. Softmax computes probabilities.'
+      }
+    },
+    pytorch: [
+      { id: 'code-dec-output-proj', code: 'self_attn_out = self.Wo(concat_out)' }
+    ],
+    equationTerms: [
+      { id: 'eq-dec-output-proj', tex: 'O_{\\text{dec}} = \\text{Concat}(O_1, \\dots, O_h) W_{o,\\text{dec}}' }
+    ],
+    syncMap: [
+      { vizElementId: 'viz-dec-output-proj', equationTermId: 'eq-dec-output-proj', codeLineId: 'code-dec-output-proj' }
+    ],
+    narration: [
+      {
+        duration: '~35s',
+        objective: 'Explain decoder output projection.',
+        script: 'We multiply the concatenated head outputs by Wo_dec. This mixes the features from all 4 heads together, producing the final output of Decoder Masked Self-Attention.',
+        audienceQuestion: 'Does the output matrix have the same shape as the decoder input?',
+        expectedAnswer: 'Yes! [target_seq_len, d_model].',
+        misconception: 'Highlight that output shape matches input shape, ready for residual addition.',
+        transition: 'Decoder Masked Self-Attention is complete! Next, we add the residual connection.'
+      }
+    ],
+    speakerNotes: {
+      teachingTips: ['Emphasize that output shape matches input shape [L_dec, d_model] so it can be added to the residual stream.'],
+      misconceptions: ['Wo_dec is a learned weight matrix of shape [d_model, d_model].']
+    }
+  },
   'dec-residual-1': {
     eyebrow: 'DECODER OPERATOR 3: SKIP CONNECTION',
     title: 'Decoder Residual Connection ①',

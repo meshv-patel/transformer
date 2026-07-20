@@ -5,7 +5,7 @@
   import { subStepIndex, replayTick, dataMode, currentScene } from '../core/stores/sceneStore.js';
   import { dModel as configDModel, numHeads as configNumHeads, dK as configDK } from '../core/stores/configStore.js';
   import { forwardPassData } from '../core/data-loader.js';
-  import { computeAttentionPipeline } from '../core/tensor-ops.js';
+  import { computeAttentionPipeline, splitHeads } from '../core/tensor-ops.js';
   import { getSceneCopy } from '../data/scene-copy.js';
   import { focusShot } from '../core/camera/cameraStore.js';
   import { motionMs, prefersReducedMotion } from '../core/motion.js';
